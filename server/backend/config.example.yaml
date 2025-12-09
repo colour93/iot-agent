@@ -1,0 +1,20 @@
+port: 4000
+mqtt:
+  url: mqtt://localhost:1883
+  user: dev
+  pass: dev
+postgres:
+  url: postgres://postgres:postgres@localhost:5432/iot
+redis:
+  url: redis://localhost:6379
+jwt:
+  secret: dev-secret
+llm:
+  provider: openai # openai|anthropic|google|deepseek|qwen
+  apiKey: ""
+  baseUrl: "" # 可选，自定义网关
+  model: gpt-4o-mini
+cors:
+  origins:
+    - "*"
+
