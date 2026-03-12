@@ -43,7 +43,7 @@ async function bootstrap() {
 }
 
 bootstrap().catch((err) => {
-  logger.error('Fatal error', err);
+  logger.error({ err }, 'Fatal error');
   process.exit(1);
 });
 

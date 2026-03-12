@@ -31,8 +31,9 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
 
 export function homeGuard(param: string) {
   return (req: Request, res: Response, next: NextFunction) => {
-    const homeId = req.params[param];
-    if (!req.auth?.homeIds || !req.auth.homeIds.includes(homeId)) {
+    const value = req.params[param];
+    const homeId = Array.isArray(value) ? value[0] : value;
+    if (!homeId || !req.auth?.homeIds || !req.auth.homeIds.includes(homeId)) {
       return res.status(403).json({ error: 'forbidden' });
     }
     next();

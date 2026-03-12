@@ -25,7 +25,7 @@ export async function initDataSource() {
       await AppDataSource.initialize();
       logger.info('Postgres connected');
     } catch (err) {
-      logger.error('Postgres connection failed', err);
+      logger.error({ err }, 'Postgres connection failed');
       throw err;
     }
   }

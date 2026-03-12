@@ -12,7 +12,7 @@ export function createHomeRoutes(dataSource: DataSource) {
   });
 
   router.post('/homes', async (req, res) => {
-    const ownerId = req.body.ownerId || (req as any).auth?.userId;
+    const ownerId = req.body.ownerId || req.auth?.userId;
     if (!ownerId) return res.status(400).json({ code: 400, msg: 'ownerId required' });
     const user = await dataSource.getRepository(User).findOne({ where: { id: ownerId } });
     if (!user) return res.status(400).json({ code: 400, msg: 'owner not found' });

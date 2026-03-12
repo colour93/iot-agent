@@ -6,7 +6,7 @@ import { Device } from './device.js';
 @Entity('rooms')
 export class Room extends BaseModel {
   @Column({ type: 'varchar' })
-  name!: string;
+  declare name: string;
 
   @Column({ type: 'varchar', nullable: true })
   floor?: string;
@@ -15,9 +15,9 @@ export class Room extends BaseModel {
   type?: string;
 
   @ManyToOne(() => Home, (home) => home.rooms, { eager: true })
-  home!: Home;
+  declare home: Home;
 
   @OneToMany(() => Device, (device) => device.room)
-  devices!: Device[];
+  declare devices: Device[];
 }
 

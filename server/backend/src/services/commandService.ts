@@ -31,7 +31,7 @@ export async function retryTimeouts(
     cmd.sentAt = new Date();
     await repo.save(cmd);
     if (cmd.homeId && cmd.roomId) {
-      await sendCommand(mqttClient, cmd.homeId, cmd.roomId, cmd.device.deviceId, {
+      await sendCommand(mqttClient, cmd.device.deviceId, {
         cmdId: cmd.cmdId,
         method: cmd.method,
         params: cmd.params,

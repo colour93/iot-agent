@@ -9,13 +9,13 @@ import { nanoid } from 'nanoid';
 
 export abstract class BaseModel extends BaseEntity {
   @PrimaryColumn({ type: 'varchar' })
-  id!: string;
+  declare id: string;
 
   @CreateDateColumn({ type: 'timestamptz' })
-  createdAt!: Date;
+  declare createdAt: Date;
 
   @UpdateDateColumn({ type: 'timestamptz' })
-  updatedAt!: Date;
+  declare updatedAt: Date;
 
   @BeforeInsert()
   assignId() {

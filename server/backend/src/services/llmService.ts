@@ -64,7 +64,7 @@ export async function callLLM(
     summary: outputText.slice(0, 80),
   });
   await invocationRepo.save(invocation);
-  logger.info(`[LLM][${role}]`, { homeId, summary: invocation.summary });
+  logger.info({ homeId, summary: invocation.summary }, `[LLM][${role}]`);
   return outputText;
 }
 
@@ -139,7 +139,7 @@ export async function chatWithTools(
         roomId,
         sentAt: new Date(),
       });
-      await sendCommand(mqttClient, homeId, roomId || 'unknown', deviceId, {
+      await sendCommand(mqttClient, deviceId, {
         cmdId,
         method,
         params: params || {},
@@ -163,7 +163,7 @@ export async function chatWithTools(
     });
     return { text };
   } catch (err) {
-    logger.error('LLM error', err);
+    logger.error({ err }, 'LLM error');
     return { text: '模型调用失败，请稍后重试。' };
   }
 }

@@ -8,13 +8,13 @@ export class LLMInvocation extends BaseModel {
   @ManyToOne(() => LLMSession, (session) => session.invocations, {
     eager: true,
   })
-  session!: LLMSession;
+  declare session: LLMSession;
 
   @ManyToOne(() => Home, (home) => home.llmInvocations, { eager: true })
-  home!: Home;
+  declare home: Home;
 
   @Column({ type: 'varchar' })
-  role!: 'front' | 'back';
+  declare role: 'front' | 'back';
 
   @Column({ type: 'varchar', nullable: true })
   summary?: string;
@@ -26,12 +26,12 @@ export class LLMInvocation extends BaseModel {
   output?: Record<string, unknown>;
 
   @Column({ type: 'integer', default: 0 })
-  tokensIn!: number;
+  declare tokensIn: number;
 
   @Column({ type: 'integer', default: 0 })
-  tokensOut!: number;
+  declare tokensOut: number;
 
   @Column({ type: 'float', default: 0 })
-  cost!: number;
+  declare cost: number;
 }
 

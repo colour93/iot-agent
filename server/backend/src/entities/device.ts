@@ -12,25 +12,26 @@ import { DeviceAttrsSnapshot } from './deviceAttrsSnapshot.js';
 import { TelemetryLog } from './telemetryLog.js';
 import { DeviceEvent } from './deviceEvent.js';
 import { Command } from './command.js';
+import type { DeviceCapability } from './deviceCapability.js';
 
 export type DeviceCategory = 'sensor' | 'actuator' | 'both';
 
 @Entity('devices')
 export class Device extends BaseModel {
   @Column({ type: 'varchar', unique: true })
-  deviceId!: string; // 物理 ID
+  declare deviceId: string; // 物理 ID
 
   @Column({ type: 'varchar' })
-  name!: string;
+  declare name: string;
 
   @Column({ type: 'varchar', nullable: true })
   type?: string;
 
   @Column({ type: 'varchar', default: 'both' })
-  category!: DeviceCategory;
+  declare category: DeviceCategory;
 
   @Column({ type: 'varchar', default: 'offline' })
-  status!: 'online' | 'offline';
+  declare status: 'online' | 'offline';
 
   @Column({ type: 'varchar', nullable: true })
   fwVersion?: string;
@@ -42,10 +43,10 @@ export class Device extends BaseModel {
   lastSeen?: Date;
 
   @ManyToOne(() => Room, (room) => room.devices, { eager: true })
-  room!: Room;
+  declare room: Room;
 
-  @OneToMany('DeviceCapability', (cap: any) => cap.device, { cascade: true })
-  capabilities!: any[];
+  @OneToMany('DeviceCapability', (cap: DeviceCapability) => cap.device, { cascade: true })
+  declare capabilities: DeviceCapability[];
 
   @OneToOne(() => DeviceAttrsSnapshot, (snap) => snap.device, {
     cascade: true,
@@ -55,12 +56,12 @@ export class Device extends BaseModel {
   snapshot?: DeviceAttrsSnapshot;
 
   @OneToMany(() => TelemetryLog, (log) => log.device)
-  telemetryLogs!: TelemetryLog[];
+  declare telemetryLogs: TelemetryLog[];
 
   @OneToMany(() => DeviceEvent, (event) => event.device)
-  events!: DeviceEvent[];
+  declare events: DeviceEvent[];
 
   @OneToMany(() => Command, (cmd) => cmd.device)
-  commands!: Command[];
+  declare commands: Command[];
 }
 

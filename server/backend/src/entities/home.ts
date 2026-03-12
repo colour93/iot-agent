@@ -9,27 +9,27 @@ import { LLMInvocation } from './llmInvocation.js';
 @Entity('homes')
 export class Home extends BaseModel {
   @Column({ type: 'varchar' })
-  name!: string;
+  declare name: string;
 
   @Column({ type: 'varchar', nullable: true })
   address?: string;
 
   @Column({ type: 'varchar', default: 'Asia/Shanghai' })
-  timezone!: string;
+  declare timezone: string;
 
   @ManyToOne(() => User, (user) => user.homes, { eager: true })
-  owner!: User;
+  declare owner: User;
 
   @OneToMany(() => Room, (room) => room.home)
-  rooms!: Room[];
+  declare rooms: Room[];
 
   @OneToMany(() => Automation, (a) => a.home)
-  automations!: Automation[];
+  declare automations: Automation[];
 
   @OneToMany(() => LLMSession, (s) => s.home)
-  llmSessions!: LLMSession[];
+  declare llmSessions: LLMSession[];
 
   @OneToMany(() => LLMInvocation, (i) => i.home)
-  llmInvocations!: LLMInvocation[];
+  declare llmInvocations: LLMInvocation[];
 }
 

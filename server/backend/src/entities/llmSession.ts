@@ -8,15 +8,15 @@ export type LlmRole = 'front' | 'back';
 @Entity('llm_sessions')
 export class LLMSession extends BaseModel {
   @ManyToOne(() => Home, (home) => home.llmSessions, { eager: true })
-  home!: Home;
+  declare home: Home;
 
   @Column({ type: 'varchar' })
-  role!: LlmRole;
+  declare role: LlmRole;
 
   @Column({ type: 'varchar', nullable: true })
   contextRef?: string;
 
   @OneToMany(() => LLMInvocation, (inv) => inv.session)
-  invocations!: LLMInvocation[];
+  declare invocations: LLMInvocation[];
 }
 

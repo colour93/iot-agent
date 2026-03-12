@@ -6,18 +6,18 @@ import { AuditLog } from './auditLog.js';
 @Entity('users')
 export class User extends BaseModel {
   @Column({ type: 'varchar', unique: true })
-  email!: string;
+  declare email: string;
 
   @Column({ type: 'varchar' })
-  passwordHash!: string;
+  declare passwordHash: string;
 
   @Column({ type: 'varchar', default: 'user' })
-  role!: 'user' | 'admin';
+  declare role: 'user' | 'admin';
 
   @OneToMany(() => Home, (home) => home.owner)
-  homes!: Home[];
+  declare homes: Home[];
 
   @OneToMany(() => AuditLog, (log) => log.user)
-  auditLogs!: AuditLog[];
+  declare auditLogs: AuditLog[];
 }
 

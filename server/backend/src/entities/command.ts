@@ -7,7 +7,7 @@ export type CommandStatus = 'pending' | 'sent' | 'acked' | 'failed' | 'timeout';
 @Entity('commands')
 export class Command extends BaseModel {
   @ManyToOne(() => Device, (device) => device.commands, { eager: true })
-  device!: Device;
+  declare device: Device;
 
   @Column({ type: 'varchar', nullable: true })
   homeId?: string;
@@ -16,16 +16,16 @@ export class Command extends BaseModel {
   roomId?: string;
 
   @Column({ type: 'varchar' })
-  cmdId!: string;
+  declare cmdId: string;
 
   @Column({ type: 'varchar' })
-  method!: string;
+  declare method: string;
 
   @Column({ type: 'jsonb', default: {} })
-  params!: Record<string, unknown>;
+  declare params: Record<string, unknown>;
 
   @Column({ type: 'varchar', default: 'pending' })
-  status!: CommandStatus;
+  declare status: CommandStatus;
 
   @Column({ type: 'timestamptz', nullable: true })
   sentAt?: Date;
@@ -37,6 +37,6 @@ export class Command extends BaseModel {
   error?: string;
 
   @Column({ type: 'int', default: 0 })
-  retryCount!: number;
+  declare retryCount: number;
 }
 

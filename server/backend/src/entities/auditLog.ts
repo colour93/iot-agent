@@ -5,10 +5,10 @@ import { User } from './user.js';
 @Entity('audit_logs')
 export class AuditLog extends BaseModel {
   @ManyToOne(() => User, (user) => user.auditLogs, { eager: true })
-  user!: User;
+  declare user: User;
 
   @Column({ type: 'varchar' })
-  action!: string;
+  declare action: string;
 
   @Column({ type: 'varchar', nullable: true })
   target?: string;

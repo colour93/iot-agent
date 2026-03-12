@@ -52,7 +52,7 @@ export function createDeviceRoutes(dataSource: DataSource, mqttClient: import('m
     });
     if (!device) return res.status(404).json({ code: 404, msg: 'device not found' });
 
-    const auth = (req as any).auth;
+    const auth = req.auth;
     const ownerId = device.room?.home?.owner?.id;
     const isAdmin = auth?.role === 'admin';
     const ownsHome = auth?.userId && ownerId && auth.userId === ownerId;

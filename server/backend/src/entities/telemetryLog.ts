@@ -5,18 +5,18 @@ import { Device } from './device.js';
 @Entity('telemetry_logs')
 export class TelemetryLog extends BaseModel {
   @ManyToOne(() => Device, (device) => device.telemetryLogs, { eager: true })
-  device!: Device;
+  declare device: Device;
 
   @Column({ type: 'varchar' })
-  homeId!: string;
+  declare homeId: string;
 
   @Column({ type: 'varchar' })
-  roomId!: string;
+  declare roomId: string;
 
   @Column({ type: 'timestamptz' })
-  ts!: Date;
+  declare ts: Date;
 
   @Column({ type: 'jsonb' })
-  payload!: Record<string, unknown>;
+  declare payload: Record<string, unknown>;
 }
 

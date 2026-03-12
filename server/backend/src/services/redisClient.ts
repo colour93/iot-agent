@@ -18,7 +18,7 @@ export async function initRedis() {
     await redis.connect();
     logger.info('Redis connected');
   } catch (err) {
-    logger.error('Redis connection failed', err);
+    logger.error({ err }, 'Redis connection failed');
     throw err;
   }
 }
