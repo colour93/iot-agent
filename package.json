@@ -1,0 +1,28 @@
+{
+  "name": "iot-agent",
+  "private": true,
+  "packageManager": "bun@1.3.10",
+  "workspaces": [
+    "server/backend",
+    "server/frontend"
+  ],
+  "scripts": {
+    "dev": "bun run dev:backend",
+    "dev:all": "bunx concurrently -n backend,frontend -c cyan,magenta \"bun run dev:backend\" \"bun run dev:frontend\"",
+    "build": "bun run build:backend && bun run build:frontend",
+    "typecheck": "bun run typecheck:backend && bun run typecheck:frontend",
+    "lint": "bun run --cwd server/frontend lint",
+    "dev:backend": "bun run --cwd server/backend dev",
+    "dev:frontend": "bun run --cwd server/frontend dev",
+    "build:backend": "bun run --cwd server/backend build",
+    "build:frontend": "bun run --cwd server/frontend build",
+    "typecheck:backend": "bun run --cwd server/backend typecheck",
+    "typecheck:frontend": "bun run --cwd server/frontend typecheck",
+    "fw:build:esp32": "cd device-firmware/esp32-family && pio run -e esp32",
+    "fw:build:esp32c3": "cd device-firmware/esp32-family && pio run -e esp32c3mini",
+    "fw:monitor": "cd device-firmware/esp32-family && pio device monitor -b 115200"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
