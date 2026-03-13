@@ -2,12 +2,15 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import {
   ToolLoopAgent,
   createGateway,
+  pipeAgentUIStreamToResponse,
   stepCountIs,
   tool,
   type LanguageModel,
   type ModelMessage,
+  type UIMessage,
 } from 'ai';
 import crypto from 'crypto';
+import type { Response } from 'express';
 import { DataSource } from 'typeorm';
 import { z } from 'zod';
 import { config } from '../config/env.js';
@@ -161,6 +164,34 @@ function buildRoleInstructions(role: Role, homeId: string) {
     '执行设备控制后，要返回命令号和状态；若失败，解释原因并给出下一步建议。',
     '回答使用中文，清晰简洁。',
   ].join('\n');
+}
+
+function createHomeAgent(input: {
+  dataSource: DataSource;
+  mqttClient: import('mqtt').MqttClient;
+  homeId: string;
+  role: Role;
+  model: LanguageModel;
+}) {
+  const tools = buildHomeTools(input.dataSource, input.mqttClient, input.homeId);
+  return new ToolLoopAgent({
+    model: input.model,
+    instructions: buildRoleInstructions(input.role, input.homeId),
+    tools,
+    stopWhen: stepCountIs(8),
+    temperature: 0.2,
+  });
+}
+
+function extractAssistantTextFromUIMessage(message: UIMessage | undefined) {
+  if (!message || !Array.isArray(message.parts)) return '';
+  return message.parts
+    .map((part) => {
+      if (part.type !== 'text') return '';
+      return typeof part.text === 'string' ? part.text : '';
+    })
+    .join('')
+    .trim();
 }
 
 function mergePromptWithContext(prompt: string, context: Record<string, unknown>) {
@@ -666,13 +697,12 @@ async function runHomeAgent(input: {
     return { text, toolCalls: [] } satisfies AgentRunResult;
   }
 
-  const tools = buildHomeTools(dataSource, mqttClient, homeId);
-  const agent = new ToolLoopAgent({
+  const agent = createHomeAgent({
+    dataSource,
+    mqttClient,
+    homeId,
+    role,
     model: resolvedModel.model,
-    instructions: buildRoleInstructions(role, homeId),
-    tools,
-    stopWhen: stepCountIs(8),
-    temperature: 0.2,
   });
 
   try {
@@ -791,4 +821,78 @@ export async function chatWithTools(
   });
   await saveHistory(homeId, 'front', [...usableMessages, { role: 'assistant', content: result.text }]);
   return { text: result.text, toolCalls: result.toolCalls };
+}
+
+export async function streamChatWithTools(
+  dataSource: DataSource,
+  mqttClient: import('mqtt').MqttClient,
+  homeId: string,
+  uiMessages: unknown[],
+  response: Response,
+) {
+  const role: Role = 'front';
+  const session = await getOrCreateSession(dataSource, homeId, role);
+  const allowed = await enforceRateLimit(homeId, role);
+  if (!allowed) {
+    response.status(429).json({ code: 429, msg: 'rate_limited' });
+    return;
+  }
+
+  const resolvedModel = resolveConfiguredModel();
+  if (!resolvedModel.canCall) {
+    response.status(503).json({ code: 503, msg: 'llm_not_configured' });
+    return;
+  }
+
+  const agent = createHomeAgent({
+    dataSource,
+    mqttClient,
+    homeId,
+    role,
+    model: resolvedModel.model,
+  });
+
+  let tokensIn = 0;
+  let tokensOut = 0;
+  const toolCalls = new Set<string>();
+
+  await pipeAgentUIStreamToResponse({
+    response,
+    agent,
+    uiMessages,
+    onStepFinish: (stepResult) => {
+      tokensIn += stepResult.usage.inputTokens ?? 0;
+      tokensOut += stepResult.usage.outputTokens ?? 0;
+      for (const call of stepResult.toolCalls) {
+        toolCalls.add(call.toolName);
+      }
+    },
+    onFinish: async ({ responseMessage, finishReason, isAborted, messages }) => {
+      const text = extractAssistantTextFromUIMessage(responseMessage) || (isAborted ? 'response_aborted' : '');
+      await persistInvocation(dataSource, {
+        session,
+        homeId,
+        role,
+        input: {
+          mode: 'stream',
+          provider: resolvedModel.providerName,
+          model: resolvedModel.modelName,
+          uiMessagesCount: Array.isArray(uiMessages) ? uiMessages.length : 0,
+          totalMessages: messages.length,
+        },
+        output: {
+          text,
+          finishReason: finishReason ?? null,
+          isAborted,
+          toolCalls: Array.from(toolCalls),
+        },
+        tokensIn,
+        tokensOut,
+      });
+    },
+    onError: (error) => {
+      logger.error({ err: error, homeId }, 'llm stream error');
+      return 'stream_error';
+    },
+  });
 }

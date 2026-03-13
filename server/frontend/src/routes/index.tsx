@@ -220,6 +220,115 @@ function DevicePanel({
   );
 }
 
+function SetupStep({
+  index,
+  title,
+  description,
+  done,
+  actionLabel,
+  onAction,
+}: {
+  index: number;
+  title: string;
+  description: string;
+  done: boolean;
+  actionLabel: string;
+  onAction: () => void;
+}) {
+  return (
+    <div
+      className={`inset-panel rounded-[1rem] p-3 transition-colors ${
+        done ? 'border-emerald-200/70 bg-emerald-50/70' : 'border-border/65'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span
+            className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+              done ? 'bg-emerald-100 text-emerald-700' : 'bg-muted text-foreground'
+            }`}
+          >
+            {index}
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-foreground">{title}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+          </div>
+        </div>
+        <span className={`data-pill whitespace-nowrap ${done ? 'status-live' : ''}`}>{done ? '已完成' : '待完成'}</span>
+      </div>
+      {!done ? (
+        <Button size="sm" variant="outline" className="mt-3" onClick={onAction}>
+          {actionLabel}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function QuickStartCard({
+  hasHome,
+  hasRoom,
+  hasDevice,
+  onCreateHome,
+  onCreateRoom,
+  onPreRegisterDevice,
+}: {
+  hasHome: boolean;
+  hasRoom: boolean;
+  hasDevice: boolean;
+  onCreateHome: () => void;
+  onCreateRoom: () => void;
+  onPreRegisterDevice: () => void;
+}) {
+  const completedCount = Number(hasHome) + Number(hasRoom) + Number(hasDevice);
+  const progress = `${Math.round((completedCount / 3) * 100)}%`;
+
+  return (
+    <Card className="surface-panel relative overflow-hidden">
+      <div className="ambient-orb -right-10 -top-8 bg-[oklch(0.78_0.08_220_/_20%)]" />
+      <CardHeader className="relative space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold">快速开始</p>
+            <p className="mt-1 text-xs text-muted-foreground">完成这 3 步后，设备控制和自动化会更顺畅。</p>
+          </div>
+          <span className="data-pill">{completedCount}/3</span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-muted">
+          <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: progress }} />
+        </div>
+      </CardHeader>
+      <CardContent className="relative space-y-2.5">
+        <SetupStep
+          index={1}
+          title="创建家庭"
+          description="先确认你当前要管理的真实空间。"
+          done={hasHome}
+          actionLabel="新建家庭"
+          onAction={onCreateHome}
+        />
+        <SetupStep
+          index={2}
+          title="添加房间"
+          description="按实际场景拆分，例如客厅、主卧、书房。"
+          done={hasRoom}
+          actionLabel="添加房间"
+          onAction={onCreateRoom}
+        />
+        <SetupStep
+          index={3}
+          title="预注册设备"
+          description="把设备归到房间，命令和自动化才能精准落位。"
+          done={hasDevice}
+          actionLabel="预注册设备"
+          onAction={onPreRegisterDevice}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
 function Dashboard() {
   const selectedHome = useAppStore((s) => s.selectedHome);
   const selectedRoom = useAppStore((s) => s.selectedRoom);
@@ -248,6 +357,11 @@ function Dashboard() {
   const rooms = structure?.rooms ?? [];
   const currentRoom = rooms.find((room) => room.id === selectedRoom) ?? rooms[0];
   const currentDevices = currentRoom?.devices ?? [];
+  const roomCount = currentHome?.roomsCount ?? rooms.length;
+  const deviceCount = currentHome?.devicesCount ?? 0;
+  const hasHome = homes.length > 0;
+  const hasRoom = roomCount > 0;
+  const hasDevice = deviceCount > 0;
 
   const enabledAutomations = useMemo(
     () => automations.filter((automation) => automation.enabled).length,
@@ -405,14 +519,43 @@ function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="surface-panel">
-            <CardHeader className="text-sm font-semibold">开始前先做这三步</CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <p>1. 先创建家庭，确认这是你当前要管理的真实空间。</p>
-              <p>2. 再把房间按实际使用场景拆开，例如客厅、主卧、书房。</p>
-              <p>3. 最后在对应房间里预注册设备，命令和自动化才会自然落位。</p>
-            </CardContent>
-          </Card>
+          <QuickStartCard
+            hasHome={hasHome}
+            hasRoom={hasRoom}
+            hasDevice={hasDevice}
+            onCreateHome={() => setCreateHomeOpen(true)}
+            onCreateRoom={() => {
+              const targetHomeId = selectedHome || homes[0]?.id;
+              if (!targetHomeId) {
+                setCreateHomeOpen(true);
+                return;
+              }
+              if (!selectedHome) {
+                selectHome(targetHomeId);
+              }
+              setCreateRoomOpen(true);
+            }}
+            onPreRegisterDevice={() => {
+              const targetHomeId = selectedHome || homes[0]?.id;
+              if (!targetHomeId) {
+                setCreateHomeOpen(true);
+                return;
+              }
+              if (!selectedHome) {
+                selectHome(targetHomeId);
+                return;
+              }
+              if (!rooms.length) {
+                setCreateRoomOpen(true);
+                return;
+              }
+              if (!currentRoom) {
+                selectRoom(rooms[0]?.id);
+              }
+              setCreateDeviceOpen(true);
+            }}
+          />
+
         </aside>
 
         <div className="space-y-5">

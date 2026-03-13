@@ -1,8 +1,9 @@
-import { createRootRoute, Outlet, Link, useNavigate, redirect } from '@tanstack/react-router';
+import { createRootRoute, Outlet, Link, useNavigate, redirect, useLocation } from '@tanstack/react-router';
 import { useAppStore } from '../lib/store';
 import { useEffect } from 'react';
 import { Button } from '../components/ui/button';
 import { useHomeStructure, useHomes } from '../lib/swr-hooks';
+import { cn } from '../lib/utils';
 
 const navItems = [
   { to: '/', label: '总览' },
@@ -20,10 +21,12 @@ function Shell() {
   const hydrated = useAppStore((s) => s.hydrated);
   const logout = useAppStore((s) => s.logout);
   const navigate = useNavigate();
+  const location = useLocation();
   const { data: homes = [] } = useHomes(!!token);
   const { data: structure } = useHomeStructure(token ? selectedHome : undefined);
   const currentHome = homes.find((item) => item.id === selectedHome) || structure?.home;
   const currentRoom = structure?.rooms.find((item) => item.id === selectedRoom);
+  const isChatRoute = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
 
   useEffect(() => {
     hydrate();
@@ -42,7 +45,12 @@ function Shell() {
     : '先选择一个家庭开始管理';
 
   return (
-    <div className="min-h-screen pb-8 text-foreground">
+    <div
+      className={cn(
+        'text-foreground',
+        isChatRoute ? 'h-dvh overflow-hidden' : 'min-h-screen pb-8',
+      )}
+    >
       <header className="sticky top-0 z-40 px-4 pt-4 sm:px-6 sm:pt-5 lg:px-8">
         <div className="mx-auto max-w-[1240px]">
           <div className="relative overflow-hidden rounded-[1.3rem] border border-border/80 bg-background/90 px-4 py-4 shadow-[0_18px_34px_-28px_oklch(0.28_0.02_240_/_18%)] backdrop-blur-xl sm:px-5">
@@ -98,8 +106,14 @@ function Shell() {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-[1240px] px-4 py-6 sm:px-6 lg:px-8">
-        <div className="page-enter">
+      <main
+        className={cn(
+          isChatRoute
+            ? 'flex h-[calc(100dvh-7.8rem)] px-3 pb-4 pt-4 sm:px-4 lg:px-5'
+            : 'mx-auto max-w-[1240px] px-4 py-6 sm:px-6 lg:px-8',
+        )}
+      >
+        <div className={cn('page-enter', isChatRoute ? 'h-full w-full' : '')}>
           <Outlet />
         </div>
       </main>

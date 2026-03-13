@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { callLLM, chatWithTools } from '../services/llmService.js';
+import { callLLM, chatWithTools, streamChatWithTools } from '../services/llmService.js';
 import { DataSource } from 'typeorm';
 import { MqttClient } from 'mqtt';
 import { Home } from '../entities/index.js';
+import { logger } from '../logger.js';
 
 async function canAccessHome(dataSource: DataSource, req: any, homeId: string) {
   if (req.auth?.role === 'admin') return true;
@@ -61,6 +62,25 @@ export function createLlmRoutes(dataSource: DataSource, mqttClient: MqttClient) 
     res.json(result);
   });
 
+  router.post('/homes/:homeId/llm/chat/stream', async (req, res) => {
+    if (!(await canAccessHome(dataSource, req, req.params.homeId))) {
+      return res.status(403).json({ code: 403, msg: 'forbidden' });
+    }
+
+    const { messages = [] } = req.body ?? {};
+    if (!Array.isArray(messages)) {
+      return res.status(400).json({ code: 400, msg: 'messages must be array' });
+    }
+
+    try {
+      await streamChatWithTools(dataSource, mqttClient, req.params.homeId, messages, res);
+    } catch (err) {
+      logger.error({ err, homeId: req.params.homeId }, 'llm stream route failed');
+      if (!res.headersSent) {
+        res.status(500).json({ code: 500, msg: 'stream_failed' });
+      }
+    }
+  });
+
   return router;
 }
-
