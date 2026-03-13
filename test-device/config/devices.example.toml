@@ -1,0 +1,110 @@
+[simulator]
+logLevel = "info"
+shutdownAfterSec = 0
+
+[mqtt]
+url = "mqtt://localhost:1883"
+username = "dev"
+password = "dev"
+keepaliveSec = 30
+reconnectPeriodMs = 2000
+clean = true
+
+[topic]
+baseTemplate = "device/{deviceId}"
+# If you want to align with docs "home/room/device" structure:
+# baseTemplate = "home/{homeId}/room/{roomId}/device/{deviceId}"
+
+[[devices]]
+deviceId = "dev-sim-1"
+homeId = "home-1"
+roomId = "room-1"
+name = "Simulated Sensor Node"
+type = "both"
+category = "both"
+fw = "sim-1.0.0"
+telemetryIntervalSec = 5
+heartbeatIntervalSec = 20
+registerOnConnect = true
+onlineOnConnect = true
+startupDelayMs = 0
+
+[devices.meta]
+chip = "esp32-sim"
+mac = "00:00:00:00:00:01"
+
+[devices.attrs.temperature]
+mode = "random-walk"
+min = 19
+max = 28
+step = 0.4
+precision = 1
+
+[devices.attrs.humidity]
+mode = "random-float"
+min = 38
+max = 70
+precision = 0
+
+[devices.attrs.led]
+mode = "constant"
+value = false
+
+[[devices.methods]]
+name = "set_led"
+ackStatus = "ok"
+result = { message = "led updated by simulator" }
+
+[devices.methods.apply]
+type = "set-attr"
+attr = "led"
+fromParam = "on"
+
+[[devices.methods]]
+name = "set_threshold"
+ackStatus = "ok"
+
+[devices.methods.apply]
+type = "set-attr"
+attr = "temperatureThreshold"
+fromParam = "threshold"
+
+[[devices.events]]
+eventType = "motion"
+intervalSec = 30
+chance = 0.4
+
+[devices.events.params.strength]
+mode = "random-float"
+min = 0
+max = 1
+precision = 2
+
+[[devices]]
+deviceId = "dev-sim-2"
+homeId = "home-1"
+roomId = "room-2"
+name = "Simulated Light Node"
+type = "actuator"
+category = "actuator"
+fw = "sim-1.0.0"
+telemetryIntervalSec = 8
+heartbeatIntervalSec = 25
+registerOnConnect = true
+onlineOnConnect = true
+startupDelayMs = 500
+
+[devices.attrs.power]
+mode = "toggle"
+values = [true, false]
+
+[devices.attrs.brightness]
+mode = "sequence"
+values = [30, 45, 60, 75, 90]
+
+[[devices.methods]]
+name = "set_light"
+ackStatus = "ok"
+
+[devices.methods.apply]
+type = "merge-attrs"

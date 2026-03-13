@@ -206,6 +206,7 @@ async function handleCommandAck(dataSource: DataSource, payload: CommandAckPaylo
   cmd.status = payload.status === 'ok' ? 'acked' : 'failed';
   cmd.ackAt = new Date();
   cmd.error = payload.error;
+  cmd.result = payload.result;
   await repo.save(cmd);
 }
 

@@ -36,6 +36,9 @@ export class Command extends BaseModel {
   @Column({ type: 'varchar', nullable: true })
   error?: string;
 
+  @Column({ type: 'jsonb', nullable: true })
+  result?: Record<string, unknown>;
+
   @Column({ type: 'int', default: 0 })
   declare retryCount: number;
 }
