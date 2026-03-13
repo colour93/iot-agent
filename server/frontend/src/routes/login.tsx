@@ -36,23 +36,23 @@ function LoginPage() {
   return (
     <div className="mx-auto mt-4 grid max-w-4xl gap-4 lg:grid-cols-[1.1fr_1fr]">
       <section className="surface-panel relative overflow-hidden rounded-2xl p-6">
-        <div className="ambient-orb -right-20 -top-20 bg-[oklch(0.73_0.14_218_/_42%)]" />
+        <div className="ambient-orb -right-20 -top-20 bg-[oklch(0.73_0.08_214_/_24%)]" />
         <div className="relative space-y-4">
           <div>
-            <p className="section-eyebrow">Welcome</p>
-            <h2 className="mt-1 text-2xl font-semibold sm:text-3xl">进入 IoT 协同控制台</h2>
+            <p className="section-eyebrow">欢迎使用</p>
+            <h2 className="mt-1 text-2xl font-semibold sm:text-3xl">进入家庭控制台</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              登录后可统一管理家庭、设备命令、自动化规则和前台模型会话。
+              登录后可统一管理家庭、设备命令、自动化规则和对话助手。
             </p>
           </div>
           <ul className="space-y-2 text-sm text-muted-foreground">
-            <li className="rounded-lg border border-border/70 bg-white/65 px-3 py-2">
+            <li className="inset-panel rounded-lg px-3 py-2">
               家庭级上下文隔离，避免跨家庭误操作。
             </li>
-            <li className="rounded-lg border border-border/70 bg-white/65 px-3 py-2">
+            <li className="inset-panel rounded-lg px-3 py-2">
               规则优先执行，LLM 用于解释与辅助生成。
             </li>
-            <li className="rounded-lg border border-border/70 bg-white/65 px-3 py-2">
+            <li className="inset-panel rounded-lg px-3 py-2">
               指标与链路快照在观测页统一查看。
             </li>
           </ul>
@@ -61,7 +61,7 @@ function LoginPage() {
 
       <section className="surface-panel rounded-2xl p-6">
         <div className="mb-4">
-          <p className="section-eyebrow">Account</p>
+          <p className="section-eyebrow">账号入口</p>
           <div className="mt-1 flex items-center justify-between gap-2">
             <span className="text-lg font-semibold">{isRegister ? '注册账号' : '登录账号'}</span>
             <Button variant="link" onClick={() => setIsRegister(!isRegister)} className="text-sm">

@@ -14,7 +14,7 @@ import type { Device, Home, Room } from '../lib/types';
 function MetricTile({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
     <div className="surface-panel relative overflow-hidden p-4">
-      <div className="text-[0.68rem] uppercase tracking-[0.24em] text-muted-foreground">{label}</div>
+      <div className="text-[0.72rem] tracking-[0.18em] text-muted-foreground">{label}</div>
       <div className="mt-2 text-2xl font-semibold">{value}</div>
       <div className="mt-1 text-xs text-muted-foreground">{hint}</div>
     </div>
@@ -34,10 +34,10 @@ function HomeCard({
     <button
       type="button"
       onClick={onClick}
-      className={`w-full rounded-[1.15rem] border p-4 text-left transition ${
+      className={`surface-panel interactive-panel w-full rounded-[1.15rem] p-4 text-left focus-visible:outline-none ${
         active
-          ? 'border-primary/30 bg-primary/10 shadow-[0_18px_40px_-28px_oklch(0.34_0.14_220_/_45%)]'
-          : 'border-border/80 bg-white/82 hover:-translate-y-px hover:border-primary/20 hover:bg-white'
+          ? 'border-primary/18 bg-primary/6 shadow-[0_18px_34px_-28px_oklch(0.29_0.08_220_/_22%)]'
+          : 'bg-card/82'
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -88,8 +88,8 @@ function RoomCard({
 }) {
   return (
     <article
-      className={`rounded-[1.1rem] border p-4 transition ${
-        active ? 'border-primary/30 bg-white shadow-[0_16px_36px_-28px_oklch(0.34_0.14_220_/_45%)]' : 'border-border/80 bg-white/72'
+      className={`surface-panel rounded-[1.1rem] p-4 ${
+        active ? 'border-primary/18 bg-card shadow-[0_18px_34px_-28px_oklch(0.29_0.08_220_/_18%)]' : 'bg-card/78'
       }`}
     >
       {editing ? (
@@ -253,6 +253,15 @@ function Dashboard() {
     () => automations.filter((automation) => automation.enabled).length,
     [automations],
   );
+  const heroTitle = currentHome
+    ? `继续管理 ${currentHome.name} 的空间与设备`
+    : '先创建一个家庭，开始整理你的空间与设备';
+  const heroDescription = currentHome
+    ? currentRoom
+      ? `当前聚焦 ${currentRoom.name}，下方可以继续查看设备状态、维护房间信息，并快速进入自动化与观测。`
+      : '先选择一个房间，再继续查看设备状态、下发命令或整理自动化。'
+    : '创建家庭后，就能按房间归置设备，让命令、自动化和对话都落在明确的空间上下文里。';
+  const roomSummary = currentRoom?.name || (rooms.length ? '请选择房间' : '还没有房间');
 
   useEffect(() => {
     if (!selectedHome && homes.length) {
@@ -294,26 +303,36 @@ function Dashboard() {
   return (
     <div className="space-y-6">
       <section className="surface-panel relative overflow-hidden px-5 py-6 sm:px-6">
-        <div className="ambient-orb -left-14 top-10 bg-[oklch(0.74_0.13_220_/_40%)]" />
-        <div className="ambient-orb -right-10 bottom-0 bg-[oklch(0.79_0.08_176_/_42%)] [animation-delay:0.4s]" />
+        <div className="ambient-orb -left-14 top-8 bg-[oklch(0.73_0.08_214_/_24%)]" />
+        <div className="ambient-orb -right-10 bottom-0 bg-[oklch(0.92_0.02_92_/_48%)] [animation-delay:0.4s]" />
         <div className="relative flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">
-            <p className="section-eyebrow">Operator Workspace</p>
-            <h2 className="mt-1 text-2xl font-semibold sm:text-3xl">先锁定家庭，再进入房间上下文处理设备</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              首页现在围绕“家庭、房间、设备”这条管理顺序展开，避免在同一屏里同时做太多不相关操作。
-            </p>
+            <p className="section-eyebrow">家庭控制总览</p>
+            <h2 className="mt-1 text-2xl font-semibold sm:text-3xl">{heroTitle}</h2>
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{heroDescription}</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Link to="/automations">
-              <Button size="sm" variant="outline">管理自动化</Button>
-            </Link>
-            <Link to="/chat">
-              <Button size="sm" variant="outline">进入对话助手</Button>
-            </Link>
-            <Link to="/observability">
-              <Button size="sm">查看观测面板</Button>
-            </Link>
+          <div className="flex w-full flex-col gap-3 xl:w-auto xl:items-end">
+            <div className="grid gap-2 sm:grid-cols-2 xl:w-[360px]">
+              <div className="inset-panel rounded-[1rem] p-3">
+                <div className="text-xs text-muted-foreground">当前房间</div>
+                <div className="mt-1 text-sm font-semibold">{roomSummary}</div>
+              </div>
+              <div className="inset-panel rounded-[1rem] p-3">
+                <div className="text-xs text-muted-foreground">在线设备</div>
+                <div className="mt-1 text-sm font-semibold">{currentHome?.onlineDevicesCount ?? 0} 台</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link to="/automations">
+                <Button size="sm" variant="outline">管理自动化</Button>
+              </Link>
+              <Link to="/chat">
+                <Button size="sm" variant="outline">进入对话助手</Button>
+              </Link>
+              <Link to="/observability">
+                <Button size="sm">查看观测面板</Button>
+              </Link>
+            </div>
           </div>
         </div>
       </section>
@@ -324,7 +343,7 @@ function Dashboard() {
             <CardHeader className="flex items-center justify-between gap-2">
               <div>
                 <div className="text-sm font-semibold">家庭列表</div>
-                <div className="mt-1 text-xs text-muted-foreground">从这里切换当前工作上下文。</div>
+                <div className="mt-1 text-xs text-muted-foreground">从这里切换当前正在管理的空间。</div>
               </div>
               <Button size="sm" variant="outline" onClick={() => setCreateHomeOpen((open) => !open)}>
                 {createHomeOpen ? '收起' : '新建'}
@@ -342,7 +361,7 @@ function Dashboard() {
               ))}
 
               {createHomeOpen ? (
-                <div className="rounded-[1.15rem] border border-border/80 bg-white/72 p-4">
+                <div className="inset-panel rounded-[1.15rem] p-4">
                   <div className="space-y-2">
                     <Input
                       placeholder="家庭名称"
@@ -387,7 +406,7 @@ function Dashboard() {
           </Card>
 
           <Card className="surface-panel">
-            <CardHeader className="text-sm font-semibold">建议操作顺序</CardHeader>
+            <CardHeader className="text-sm font-semibold">开始前先做这三步</CardHeader>
             <CardContent className="space-y-2 text-sm text-muted-foreground">
               <p>1. 先创建家庭，确认这是你当前要管理的真实空间。</p>
               <p>2. 再把房间按实际使用场景拆开，例如客厅、主卧、书房。</p>
@@ -402,7 +421,7 @@ function Dashboard() {
               <div className="surface-panel relative overflow-hidden p-5 sm:p-6">
                 <div className="flex flex-col gap-5">
                   <div>
-                    <p className="section-eyebrow">Current Home</p>
+                    <p className="section-eyebrow">当前家庭</p>
                     <h3 className="mt-1 text-2xl font-semibold">{currentHome.name}</h3>
                     <p className="mt-2 text-sm text-muted-foreground">
                       当前家庭是所有房间、设备、自动化和对话上下文的根节点。
@@ -479,7 +498,7 @@ function Dashboard() {
                 {!selectedHome ? <Alert className="text-xs">先选择一个家庭，房间才能归到正确的边界里。</Alert> : null}
 
                 {createRoomOpen && selectedHome ? (
-                  <div className="rounded-[1.15rem] border border-border/80 bg-white/72 p-4">
+                  <div className="inset-panel rounded-[1.15rem] p-4">
                     <div className="grid gap-2 sm:grid-cols-3">
                       <Input
                         placeholder="房间名称"
@@ -585,7 +604,7 @@ function Dashboard() {
                 {!currentRoom ? <Alert className="text-xs">还没有选中房间。先在左侧创建或选择一个房间。</Alert> : null}
 
                 {createDeviceOpen && selectedHome && currentRoom ? (
-                  <div className="rounded-[1.15rem] border border-border/80 bg-white/72 p-4">
+                  <div className="inset-panel rounded-[1.15rem] p-4">
                     <div className="text-sm font-semibold">将新设备归入当前房间</div>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
                       <Input

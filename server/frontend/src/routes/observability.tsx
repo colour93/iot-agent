@@ -34,9 +34,9 @@ function ObservabilityPage() {
   return (
     <div className="space-y-4">
       <section className="surface-panel relative overflow-hidden p-5 sm:p-6">
-        <div className="ambient-orb -left-16 top-2 bg-[oklch(0.73_0.11_218_/_34%)]" />
+        <div className="ambient-orb -left-16 top-2 bg-[oklch(0.73_0.08_214_/_24%)]" />
         <div className="relative">
-          <p className="section-eyebrow">Observability</p>
+          <p className="section-eyebrow">运行观测</p>
           <h2 className="mt-1 text-2xl font-semibold sm:text-3xl">观测与审计面板</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             聚合设备在线状态、命令吞吐、MQTT 健康度和自动化规则快照，便于快速定位链路问题。
@@ -48,7 +48,7 @@ function ObservabilityPage() {
         <MetricCard title="设备在线" value={`${online}/${devices.length || 0}`} desc="当前家庭在线比" />
         <MetricCard title="自动化启用" value={`${enabledAutomations}/${automations.length || 0}`} desc="确定性规则状态" />
         <MetricCard title="命令总量" value={String(commandVolume)} desc="后端累计命令计数" />
-        <MetricCard title="MQTT 连接" value={mqttConnected ? 'Connected' : 'Disconnected'} desc={`lastError: ${mqttError}`} />
+        <MetricCard title="MQTT 连接" value={mqttConnected ? '已连接' : '未连接'} desc={`最近错误: ${mqttError}`} />
       </div>
 
       <Card className="surface-panel">
@@ -75,7 +75,7 @@ function ObservabilityPage() {
                         <div className="text-xs text-muted-foreground">{device.deviceId}</div>
                       </TD>
                       <TD className={device.status === 'online' ? 'text-emerald-700' : 'text-slate-500'}>
-                        {device.status}
+                        {device.status === 'online' ? '在线' : device.status === 'offline' ? '离线' : device.status}
                       </TD>
                       <TD>{device.roomId || '-'}</TD>
                       <TD>
@@ -96,7 +96,7 @@ function ObservabilityPage() {
         <CardHeader className="text-sm font-semibold">自动化规则快照</CardHeader>
         <CardContent className="space-y-2">
           {automations.slice(0, 5).map((automation) => (
-            <div key={automation.id} className="rounded-lg border border-border/80 bg-white/60 p-3">
+            <div key={automation.id} className="inset-panel rounded-lg p-3">
               <div className="flex items-center justify-between gap-2 text-sm">
                 <span className="font-medium">{automation.name}</span>
                 <span className={automation.enabled ? 'text-emerald-700' : 'text-slate-500'}>
@@ -104,7 +104,7 @@ function ObservabilityPage() {
                 </span>
               </div>
               <div className="mt-1 text-xs text-muted-foreground">
-                source: {automation.source || 'json'} | scope: {automation.scope || 'home'}
+                来源: {automation.source || 'json'} | 范围: {automation.scope || 'home'}
               </div>
             </div>
           ))}

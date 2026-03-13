@@ -34,25 +34,36 @@ function Shell() {
   }
 
   const navBase =
-    'rounded-full border border-transparent bg-transparent px-3 py-1.5 text-sm text-muted-foreground transition hover:border-border hover:bg-white/80 hover:text-foreground';
+    'rounded-full border border-transparent bg-transparent px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-border/80 hover:bg-card/80 hover:text-foreground';
+  const contextLabel = currentHome
+    ? currentRoom
+      ? `${currentHome.name} / ${currentRoom.name}`
+      : `${currentHome.name} / 全部房间`
+    : '先选择一个家庭开始管理';
 
   return (
     <div className="min-h-screen pb-8 text-foreground">
       <header className="sticky top-0 z-40 px-4 pt-4 sm:px-6 sm:pt-5 lg:px-8">
         <div className="mx-auto max-w-[1240px]">
-          <div className="relative overflow-hidden rounded-[1.4rem] border border-border/80 bg-background/86 p-4 shadow-[0_20px_40px_-34px_oklch(0.25_0.02_245_/_42%)] backdrop-blur-xl sm:p-5">
-            <div className="ambient-orb -left-10 -top-12 bg-[oklch(0.74_0.14_218_/_58%)]" />
-            <div className="ambient-orb -right-12 -bottom-16 bg-[oklch(0.76_0.08_96_/_52%)] [animation-delay:0.4s]" />
-            <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="space-y-1">
-                <p className="section-eyebrow">iot-agent</p>
-                <h1 className="text-xl font-semibold sm:text-2xl">智能家庭协同控制台</h1>
-                <p className="text-xs text-muted-foreground sm:text-sm">
-                  统一管理家庭拓扑、设备命令、自动化规则和前台对话助手。
-                </p>
+          <div className="relative overflow-hidden rounded-[1.3rem] border border-border/80 bg-background/90 px-4 py-4 shadow-[0_18px_34px_-28px_oklch(0.28_0.02_240_/_18%)] backdrop-blur-xl sm:px-5">
+            <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-[linear-gradient(90deg,transparent,oklch(0.7_0.05_218_/_40%),transparent)]" />
+            <div className="relative flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
+              <div className="min-w-0 lg:flex-[1.15]">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="inline-flex h-8 shrink-0 items-center rounded-full border border-primary/14 bg-primary/6 px-3 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-primary">
+                    IoT Agent
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold sm:text-base">家庭控制台</p>
+                    <p className="truncate text-xs text-muted-foreground sm:text-sm">
+                      {token ? `当前空间：${contextLabel}` : '登录后开始管理家庭、房间与设备'}
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="flex w-full flex-col gap-3 lg:w-auto lg:items-end">
-                <nav className="flex max-w-full items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+
+              {token ? (
+                <nav className="order-3 flex max-w-full items-center gap-2 overflow-x-auto pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:order-none lg:flex-1 lg:justify-center lg:pt-0">
                   {navItems.map((item) => (
                     <Link
                       key={item.to}
@@ -60,20 +71,23 @@ function Shell() {
                       className={navBase}
                       activeProps={{
                         className:
-                          'rounded-full border border-primary/25 bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary',
+                          'rounded-full border border-primary/18 bg-primary/8 px-3 py-1.5 text-sm font-medium text-foreground shadow-[inset_0_1px_0_oklch(1_0_0_/_48%)]',
                       }}
                     >
                       {item.label}
                     </Link>
                   ))}
                 </nav>
+              ) : null}
+
+              <div className="flex items-center justify-between gap-2 lg:min-w-[220px] lg:justify-end">
                 {!token ? (
                   <Button size="sm" onClick={() => navigate({ to: '/login' })} className="w-full sm:w-auto">
                     登录控制台
                   </Button>
                 ) : (
-                  <div className="flex flex-wrap items-center justify-end gap-2 text-xs sm:text-sm">
-                    <span className="data-pill max-w-full truncate">{user?.email}</span>
+                  <div className="flex items-center gap-2 text-xs sm:text-sm">
+                    <span className="data-pill hidden max-w-[15rem] truncate sm:inline-flex">{user?.email}</span>
                     <Button size="sm" variant="outline" onClick={() => logout()}>
                       退出
                     </Button>
@@ -81,13 +95,6 @@ function Shell() {
                 )}
               </div>
             </div>
-            {token ? (
-              <div className="relative mt-4 flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
-                <span className="data-pill">家庭: {currentHome?.name || '未选择'}</span>
-                <span className="data-pill">房间: {currentRoom?.name || '未选择'}</span>
-                <span className="data-pill">角色: {user?.role || 'unknown'}</span>
-              </div>
-            ) : null}
           </div>
         </div>
       </header>

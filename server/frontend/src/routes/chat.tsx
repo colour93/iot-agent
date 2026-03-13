@@ -26,7 +26,7 @@ function PromptChip({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="rounded-full border border-border bg-white/90 px-3 py-1 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-55"
+      className="rounded-full border border-border/80 bg-card/88 px-3 py-1 text-xs text-muted-foreground transition-all duration-200 hover:-translate-y-px hover:border-primary/14 hover:bg-secondary/88 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-55"
     >
       {prompt}
     </button>
@@ -61,10 +61,10 @@ function ChatPage() {
   return (
     <div className="space-y-4">
       <section className="surface-panel relative overflow-hidden p-4 sm:p-5">
-        <div className="ambient-orb -right-16 -top-16 bg-[oklch(0.73_0.12_220_/_36%)]" />
+        <div className="ambient-orb -right-16 -top-16 bg-[oklch(0.73_0.08_214_/_24%)]" />
         <div className="relative flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="section-eyebrow">Front Model</p>
+            <p className="section-eyebrow">对话助手</p>
             <div className="mt-1 text-lg font-semibold sm:text-xl">家庭上下文对话</div>
             <p className="mt-1 text-sm text-muted-foreground">支持状态问答、策略生成和异常排查，所有会话按家庭隔离。</p>
           </div>
@@ -94,10 +94,10 @@ function ChatPage() {
               className={`max-w-[86%] rounded-2xl px-3 py-2 sm:max-w-[78%] ${
                 m.role === 'user'
                   ? 'bg-primary text-primary-foreground shadow-[0_8px_18px_-14px_oklch(0.35_0.13_220_/_90%)]'
-                  : 'border border-border bg-white/92 text-foreground'
+                  : 'border border-border/80 bg-card/92 text-foreground'
               }`}
             >
-              <div className="mb-1 text-[10px] uppercase tracking-wide opacity-70">{m.role}</div>
+              <div className="mb-1 text-[10px] uppercase tracking-wide opacity-70">{m.role === 'user' ? '你' : '助手'}</div>
               <div className="whitespace-pre-wrap break-words">{m.text}</div>
             </div>
           </div>
@@ -107,7 +107,7 @@ function ChatPage() {
       </div>
       <div className="surface-panel rounded-xl p-3">
         <textarea
-          className="min-h-24 w-full resize-y rounded-md border border-border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+          className="min-h-24 w-full resize-y rounded-md border border-border/80 bg-background/92 px-3 py-2 text-sm outline-none transition-[border-color,box-shadow,background-color] duration-200 focus:border-primary/20 focus:bg-card focus:ring-2 focus:ring-ring/70"
           placeholder="例如：把客厅温度保持在 25 度并生成自动化"
           value={input}
           onChange={(e) => setInput(e.target.value)}

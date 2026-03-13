@@ -83,10 +83,10 @@ function AutomationsPage() {
   return (
     <div className="space-y-6">
       <section className="surface-panel relative overflow-hidden p-5 sm:p-6">
-        <div className="ambient-orb -left-10 top-2 bg-[oklch(0.73_0.13_220_/_38%)]" />
+        <div className="ambient-orb -left-10 top-2 bg-[oklch(0.73_0.08_214_/_24%)]" />
         <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="section-eyebrow">Automation Engine</p>
+            <p className="section-eyebrow">自动化中心</p>
             <h2 className="mt-1 text-2xl font-semibold sm:text-3xl">确定性规则编排</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               使用 JSON 规则定义触发条件与动作，适合高频、低延迟的设备联动场景。
@@ -110,7 +110,7 @@ function AutomationsPage() {
           <CardHeader className="text-sm font-semibold">现有规则</CardHeader>
           <CardContent className="space-y-3">
             {automations.map((a) => (
-              <article key={a.id} className="rounded-xl border border-border/80 bg-white/80 p-3">
+              <article key={a.id} className="inset-panel rounded-xl p-3">
                 <div className="flex flex-wrap items-start justify-between gap-2 text-sm font-semibold">
                   <span>{a.name}</span>
                   <div className="flex items-center gap-2">
@@ -207,7 +207,7 @@ function AutomationsPage() {
               })}
             >
               <textarea
-                className="h-72 w-full rounded-md border border-border bg-white px-3 py-2 text-xs font-mono shadow-sm"
+                className="h-72 w-full rounded-md border border-border/80 bg-background/92 px-3 py-2 text-xs font-mono shadow-[inset_0_1px_0_oklch(1_0_0_/_50%)] outline-none transition-[border-color,box-shadow,background-color] duration-200 focus:border-primary/20 focus:ring-2 focus:ring-ring/70"
                 {...register('json')}
               />
               <div className="flex flex-wrap gap-2">
