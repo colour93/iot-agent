@@ -60,3 +60,13 @@ export type AuthResponse = {
   token: string;
   user: User;
 };
+
+export type MetricsSummary = {
+  onlineDevices: number;
+  totalCommands: number;
+};
+
+export type MqttMetrics = {
+  connected: boolean;
+  lastError?: string | null;
+};

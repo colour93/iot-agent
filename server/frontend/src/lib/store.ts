@@ -58,13 +58,19 @@ export const useAppStore = create<State & Actions>((set, get) => ({
   sendChat: async (prompt) => {
     const homeId = get().selectedHome;
     if (!homeId) return;
-    set((s) => ({ chatLog: [...s.chatLog, { role: 'user', text: prompt }] }));
-    const res = await api.callFrontModel(
-      homeId,
-      [...get().chatLog.map((m) => ({ role: m.role, content: m.text })), { role: 'user', content: prompt }],
-      get().token,
-    );
-    set((s) => ({ chatLog: [...s.chatLog, { role: 'assistant', text: res.text }] }));
+    const history = [...get().chatLog, { role: 'user' as const, text: prompt }];
+    set({ chatLog: history });
+    try {
+      const res = await api.callFrontModel(
+        homeId,
+        history.map((m) => ({ role: m.role, content: m.text })),
+        get().token,
+      );
+      set((s) => ({ chatLog: [...s.chatLog, { role: 'assistant', text: res.text }] }));
+    } catch (err) {
+      set((s) => ({ chatLog: [...s.chatLog, { role: 'assistant', text: '请求失败，请稍后重试。' }] }));
+      throw err;
+    }
   },
 }));
 

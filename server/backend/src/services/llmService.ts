@@ -8,20 +8,68 @@ import {
   Command,
 } from '../entities/index.js';
 import { logger } from '../logger.js';
-import { generateText, tool } from 'ai';
+import { createGateway, generateText, tool, type LanguageModel } from 'ai';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { z } from 'zod';
 import { sendCommand } from './mqttService.js';
 import { redis } from './redisClient.js';
 import crypto from 'crypto';
 
 type Role = 'front' | 'back';
+type SupportedProvider = 'openai' | 'gateway';
 
-// 将可配置的 baseUrl/apiKey 注入环境，便于 AI SDK 读取
-if (config.llm.baseUrl) {
-  process.env.AI_BASE_URL = config.llm.baseUrl;
+type ResolvedModel =
+  | { canCall: false; reason: string }
+  | {
+      canCall: true;
+      model: LanguageModel;
+      modelName: string;
+      providerName: SupportedProvider;
+    };
+
+function normalizeProvider(value: string): SupportedProvider {
+  return value.trim().toLowerCase() === 'gateway' ? 'gateway' : 'openai';
 }
-if (config.llm.apiKey) {
-  process.env.AI_API_KEY = config.llm.apiKey;
+
+function normalizeModelForOpenAI(rawModel: string) {
+  return rawModel.startsWith('openai/') ? rawModel.slice('openai/'.length) : rawModel;
+}
+
+function resolveConfiguredModel(): ResolvedModel {
+  const apiKey = config.llm.apiKey.trim();
+  if (!apiKey) {
+    return { canCall: false, reason: 'missing_api_key' };
+  }
+
+  const provider = normalizeProvider(config.llm.provider);
+  const rawModel = config.llm.model.trim();
+
+  if (provider === 'openai') {
+    const openaiCompatible = createOpenAICompatible({
+      name: 'openai-compatible',
+      apiKey,
+      baseURL: config.llm.baseUrl || 'https://api.openai.com/v1',
+    });
+    const modelName = normalizeModelForOpenAI(rawModel || 'gpt-4o-mini');
+    return {
+      canCall: true,
+      model: openaiCompatible(modelName),
+      modelName,
+      providerName: 'openai',
+    };
+  }
+
+  const gateway = createGateway({
+    apiKey,
+    baseURL: config.llm.baseUrl || undefined,
+  });
+  const modelName = rawModel || 'openai/gpt-4o-mini';
+  return {
+    canCall: true,
+    model: gateway(modelName as any),
+    modelName,
+    providerName: 'gateway',
+  };
 }
 
 export async function getOrCreateSession(
@@ -87,9 +135,8 @@ export async function chatWithTools(
   const devicesRepo = dataSource.getRepository(Device);
   const roomsRepo = dataSource.getRepository(Room);
 
-  const canCall = !!config.llm.apiKey;
-  const model = config.llm.model || 'gpt-4o-mini';
-  if (!canCall) {
+  const resolvedModel = resolveConfiguredModel();
+  if (!resolvedModel.canCall) {
     // 无 API key 时的降级回复
     const devices = await devicesRepo.find({ where: { room: { home: { id: homeId } } as any } });
     const names = devices.map((d) => d.name || d.deviceId).join('、') || '暂无设备';
@@ -150,8 +197,16 @@ export async function chatWithTools(
   });
 
   try {
+    logger.debug(
+      {
+        provider: resolvedModel.providerName,
+        model: resolvedModel.modelName,
+        hasBaseUrl: !!config.llm.baseUrl,
+      },
+      'LLM provider resolved',
+    );
     const { text } = await generateText({
-      model,
+      model: resolvedModel.model,
       messages,
       temperature: 0.3,
       tools: {

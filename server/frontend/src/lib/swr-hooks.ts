@@ -1,11 +1,12 @@
 import useSWR from 'swr';
 import { api } from './api';
 import { mockHomes, mockRooms, mockDevices, mockAutomations } from './mocks';
-import type { Automation, Device, Home, Room } from './types';
+import type { Automation, Device, Home, MetricsSummary, MqttMetrics, Room } from './types';
 
-export function useHomes() {
+export function useHomes(enabled = true) {
   const fallback = mockHomes;
-  return useSWR<Home[]>('/api/homes', async () => {
+  const key = enabled ? '/api/homes' : null;
+  return useSWR<Home[]>(key, async () => {
     try {
       return await api.listHomes();
     } catch (err) {
@@ -68,6 +69,38 @@ export function useAutomations(homeId?: string) {
     }
   }, {
     fallbackData: fallback as Automation[],
+    revalidateOnFocus: false,
+    refreshInterval: 5000,
+  });
+}
+
+export function useMetricsSummary() {
+  const fallback: MetricsSummary = { onlineDevices: 0, totalCommands: 0 };
+  return useSWR<MetricsSummary>('/api/metrics/summary', async () => {
+    try {
+      return await api.getMetricsSummary();
+    } catch (err) {
+      console.warn('fetch metrics summary failed, using fallback', err);
+      return fallback;
+    }
+  }, {
+    fallbackData: fallback,
+    revalidateOnFocus: false,
+    refreshInterval: 5000,
+  });
+}
+
+export function useMqttMetrics() {
+  const fallback: MqttMetrics = { connected: false, lastError: null };
+  return useSWR<MqttMetrics>('/api/metrics/mqtt', async () => {
+    try {
+      return await api.getMqttMetrics();
+    } catch (err) {
+      console.warn('fetch mqtt metrics failed, using fallback', err);
+      return fallback;
+    }
+  }, {
+    fallbackData: fallback,
     revalidateOnFocus: false,
     refreshInterval: 5000,
   });

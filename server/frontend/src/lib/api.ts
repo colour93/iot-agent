@@ -1,4 +1,12 @@
-import type { Automation, Device, DeviceAttrsSnapshot, Home, Room } from './types';
+import type {
+  Automation,
+  Device,
+  DeviceAttrsSnapshot,
+  Home,
+  MetricsSummary,
+  MqttMetrics,
+  Room,
+} from './types';
 import { toast } from 'sonner';
 
 function buildHeaders(token?: string, extra?: Record<string, string>) {
@@ -150,6 +158,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ triggerContext }),
     }, token),
+
+  // Metrics
+  getMetricsSummary: (token?: string) =>
+    fetchJson<MetricsSummary>('/api/metrics/summary', undefined, token),
+  getMqttMetrics: (token?: string) =>
+    fetchJson<MqttMetrics>('/api/metrics/mqtt', undefined, token),
 
   // LLM
   callFrontModel: (homeId: string, messages: Array<{ role: string; content: string }>, token?: string) =>
