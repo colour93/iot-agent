@@ -2,7 +2,7 @@ import { createRootRoute, Outlet, Link, useNavigate, redirect } from '@tanstack/
 import { useAppStore } from '../lib/store';
 import { useEffect } from 'react';
 import { Button } from '../components/ui/button';
-import { useHomes, useRooms } from '../lib/swr-hooks';
+import { useHomeStructure, useHomes } from '../lib/swr-hooks';
 
 const navItems = [
   { to: '/', label: '总览' },
@@ -21,16 +21,16 @@ function Shell() {
   const logout = useAppStore((s) => s.logout);
   const navigate = useNavigate();
   const { data: homes = [] } = useHomes(!!token);
-  const { data: rooms = [] } = useRooms(token ? selectedHome : undefined);
-  const currentHome = homes.find((item) => item.id === selectedHome);
-  const currentRoom = rooms.find((item) => item.id === selectedRoom);
+  const { data: structure } = useHomeStructure(token ? selectedHome : undefined);
+  const currentHome = homes.find((item) => item.id === selectedHome) || structure?.home;
+  const currentRoom = structure?.rooms.find((item) => item.id === selectedRoom);
 
   useEffect(() => {
     hydrate();
   }, [hydrate]);
 
   if (!hydrated) {
-    return <div className="p-6 text-sm text-muted-foreground">正在同步会话上下文...</div>;
+    return <div className="p-6 text-sm text-muted-foreground">正在同步会话状态...</div>;
   }
 
   const navBase =
@@ -48,7 +48,7 @@ function Shell() {
                 <p className="section-eyebrow">iot-agent</p>
                 <h1 className="text-xl font-semibold sm:text-2xl">智能家庭协同控制台</h1>
                 <p className="text-xs text-muted-foreground sm:text-sm">
-                  统一管理家庭拓扑、命令链路、自动化规则与前台模型会话。
+                  统一管理家庭拓扑、设备命令、自动化规则和前台对话助手。
                 </p>
               </div>
               <div className="flex w-full flex-col gap-3 lg:w-auto lg:items-end">
@@ -81,13 +81,13 @@ function Shell() {
                 )}
               </div>
             </div>
-            {token && (
+            {token ? (
               <div className="relative mt-4 flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
                 <span className="data-pill">家庭: {currentHome?.name || '未选择'}</span>
                 <span className="data-pill">房间: {currentRoom?.name || '未选择'}</span>
                 <span className="data-pill">角色: {user?.role || 'unknown'}</span>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </header>

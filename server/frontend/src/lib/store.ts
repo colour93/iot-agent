@@ -12,8 +12,13 @@ type State = {
 
 type Actions = {
   selectHome: (homeId: string) => void;
-  selectRoom: (roomId: string) => void;
-  sendCommand: (deviceId: string, method: string, params: Record<string, unknown>) => Promise<void>;
+  selectRoom: (roomId?: string) => void;
+  sendCommand: (
+    deviceId: string,
+    method: string,
+    params: Record<string, unknown>,
+    roomIdOverride?: string,
+  ) => Promise<void>;
   sendChat: (prompt: string) => Promise<void>;
   setAuth: (token: string, user: { id: string; email: string; role: string }) => void;
   logout: () => void;
@@ -47,9 +52,9 @@ export const useAppStore = create<State & Actions>((set, get) => ({
 
   selectRoom: (roomId) => set({ selectedRoom: roomId }),
 
-  sendCommand: async (deviceId, method, params) => {
+  sendCommand: async (deviceId, method, params, roomIdOverride) => {
     const homeId = get().selectedHome;
-    const roomId = get().selectedRoom;
+    const roomId = roomIdOverride || get().selectedRoom;
     const token = get().token;
     if (!homeId || !roomId) return;
     await api.sendCommand(deviceId, { homeId, roomId, method, params }, token);
@@ -73,4 +78,3 @@ export const useAppStore = create<State & Actions>((set, get) => ({
     }
   },
 }));
-

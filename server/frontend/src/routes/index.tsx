@@ -1,404 +1,657 @@
 import { createRoute, Link } from '@tanstack/react-router';
 import { Route as RootRoute } from './__root';
 import { useAppStore } from '../lib/store';
-import { useHomes, useRooms, useDevices, useAutomations } from '../lib/swr-hooks';
-import { useEffect, useState } from 'react';
+import { useAutomations, useHomeStructure, useHomes } from '../lib/swr-hooks';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Alert } from '../components/ui/alert';
 import { api } from '../lib/api';
 import { mutate } from 'swr';
+import type { Device, Home, Room } from '../lib/types';
 
-function StatCard({ label, value, hint }: { label: string; value: string; hint: string }) {
+function MetricTile({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
-    <article className="surface-panel relative overflow-hidden p-4 sm:p-5">
-      <div className="text-[0.68rem] uppercase tracking-[0.2em] text-muted-foreground">{label}</div>
-      <div className="mt-2 text-2xl font-semibold sm:text-3xl">{value}</div>
+    <div className="surface-panel relative overflow-hidden p-4">
+      <div className="text-[0.68rem] uppercase tracking-[0.24em] text-muted-foreground">{label}</div>
+      <div className="mt-2 text-2xl font-semibold">{value}</div>
       <div className="mt-1 text-xs text-muted-foreground">{hint}</div>
-    </article>
-  );
-}
-
-function SectionTitle({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <div>
-      <h2 className="text-lg font-semibold sm:text-xl">{title}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
     </div>
   );
 }
 
-function HomeSelector() {
-  const { data: homes = [] } = useHomes();
-  const selectedHome = useAppStore((s) => s.selectedHome);
-  const selectHome = useAppStore((s) => s.selectHome);
-
-  useEffect(() => {
-    if (!selectedHome && homes.length) selectHome(homes[0].id);
-  }, [homes, selectedHome, selectHome]);
-
-  if (!homes.length) {
-    return <Alert className="text-xs">暂无家庭，请先创建</Alert>;
-  }
-
+function HomeCard({
+  home,
+  active,
+  onClick,
+}: {
+  home: Home;
+  active: boolean;
+  onClick: () => void;
+}) {
   return (
-    <label className="flex min-w-[13rem] flex-col gap-1 text-xs text-muted-foreground">
-      当前家庭
-      <select
-        className="h-10 rounded-lg border border-border bg-white/92 px-3 text-sm text-foreground shadow-sm"
-        value={selectedHome || ''}
-        onChange={(e) => selectHome(e.target.value)}
-      >
-        {homes.map((h) => (
-          <option key={h.id} value={h.id}>
-            {h.name}
-          </option>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full rounded-[1.15rem] border p-4 text-left transition ${
+        active
+          ? 'border-primary/30 bg-primary/10 shadow-[0_18px_40px_-28px_oklch(0.34_0.14_220_/_45%)]'
+          : 'border-border/80 bg-white/82 hover:-translate-y-px hover:border-primary/20 hover:bg-white'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-foreground">{home.name}</div>
+          <div className="mt-1 text-xs text-muted-foreground">{home.timezone || 'Asia/Shanghai'}</div>
+        </div>
+        <span className="data-pill shrink-0">{home.roomsCount ?? 0} 房间</span>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+        <div>
+          <div className="text-lg font-semibold text-foreground">{home.devicesCount ?? 0}</div>
+          <div>设备</div>
+        </div>
+        <div>
+          <div className="text-lg font-semibold text-foreground">{home.onlineDevicesCount ?? 0}</div>
+          <div>在线</div>
+        </div>
+        <div>
+          <div className="text-lg font-semibold text-foreground">{home.automationsCount ?? 0}</div>
+          <div>规则</div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function RoomCard({
+  room,
+  active,
+  editing,
+  draft,
+  onSelect,
+  onDraftChange,
+  onStartEdit,
+  onCancelEdit,
+  onSave,
+}: {
+  room: Room;
+  active: boolean;
+  editing: boolean;
+  draft: { name: string; floor: string; type: string };
+  onSelect: () => void;
+  onDraftChange: (field: 'name' | 'floor' | 'type', value: string) => void;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <article
+      className={`rounded-[1.1rem] border p-4 transition ${
+        active ? 'border-primary/30 bg-white shadow-[0_16px_36px_-28px_oklch(0.34_0.14_220_/_45%)]' : 'border-border/80 bg-white/72'
+      }`}
+    >
+      {editing ? (
+        <div className="space-y-2">
+          <Input value={draft.name} onChange={(e) => onDraftChange('name', e.target.value)} placeholder="房间名称" />
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Input value={draft.floor} onChange={(e) => onDraftChange('floor', e.target.value)} placeholder="楼层" />
+            <Input value={draft.type} onChange={(e) => onDraftChange('type', e.target.value)} placeholder="类型" />
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={onSave} disabled={!draft.name.trim()}>
+              保存
+            </Button>
+            <Button size="sm" variant="outline" onClick={onCancelEdit}>
+              取消
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <button type="button" onClick={onSelect} className="w-full text-left">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold">{room.name}</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {[room.floor, room.type].filter(Boolean).join(' · ') || '未设置标签'}
+                </div>
+              </div>
+              {active ? <span className="data-pill">当前房间</span> : null}
+            </div>
+            <div className="mt-4 flex gap-5 text-xs text-muted-foreground">
+              <span>{room.devicesCount ?? 0} 台设备</span>
+              <span>{room.onlineDevicesCount ?? 0} 台在线</span>
+            </div>
+          </button>
+          <div className="flex gap-2">
+            {!active ? (
+              <Button size="sm" variant="secondary" onClick={onSelect}>
+                进入房间
+              </Button>
+            ) : null}
+            <Button size="sm" variant="outline" onClick={onStartEdit}>
+              编辑
+            </Button>
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function DevicePanel({
+  device,
+  onSendCommand,
+}: {
+  device: Device;
+  onSendCommand: (deviceId: string, method: string, params: Record<string, unknown>, roomId: string) => Promise<void>;
+}) {
+  return (
+    <article className="surface-panel relative overflow-hidden rounded-[1.15rem] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold">{device.name}</div>
+          <div className="mt-1 text-xs text-muted-foreground">{device.deviceId}</div>
+        </div>
+        <span
+          className={`rounded-full border px-2 py-0.5 text-xs ${
+            device.status === 'online'
+              ? 'status-live border-emerald-200 bg-emerald-50 text-emerald-700'
+              : 'border-slate-200 bg-slate-100 text-slate-500'
+          }`}
+        >
+          {device.status === 'online' ? '在线' : '离线'}
+        </span>
+      </div>
+
+      <div className="mt-3 space-y-1 text-xs">
+        {device.attrs && Object.keys(device.attrs).length > 0 ? (
+          Object.entries(device.attrs).map(([key, value]) => (
+            <div key={key} className="flex items-center justify-between gap-3 rounded bg-muted/40 px-2 py-1">
+              <span className="text-muted-foreground">{key}</span>
+              <span>{String(value)}</span>
+            </div>
+          ))
+        ) : (
+          <div className="text-muted-foreground">还没有属性快照</div>
+        )}
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-1">
+        {(device.capabilities || []).slice(0, 4).map((cap) => (
+          <span key={`${device.deviceId}-${cap.kind}-${cap.name}`} className="rounded-full bg-muted px-2 py-0.5 text-[11px]">
+            {cap.kind}:{cap.name}
+          </span>
         ))}
-      </select>
-    </label>
+      </div>
+
+      <form
+        className="mt-3 space-y-2"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const form = e.target as HTMLFormElement;
+          const method = (form.elements.namedItem('method') as HTMLInputElement).value;
+          const raw = (form.elements.namedItem('value') as HTMLInputElement).value.trim();
+          let value: unknown = raw;
+          if (raw) {
+            try {
+              value = JSON.parse(raw);
+            } catch {
+              value = raw;
+            }
+          }
+          await onSendCommand(device.deviceId, method, raw ? { value } : {}, device.roomId);
+          form.reset();
+        }}
+      >
+        <Input
+          name="method"
+          placeholder="方法名"
+          defaultValue={device.capabilities?.find((cap) => cap.kind === 'method')?.name || 'set_led'}
+        />
+        <Input name="value" placeholder='参数值，支持 JSON，例如 {"value":1}' />
+        <Button type="submit" size="sm" className="w-full">
+          下发命令
+        </Button>
+      </form>
+    </article>
   );
 }
 
 function Dashboard() {
   const selectedHome = useAppStore((s) => s.selectedHome);
   const selectedRoom = useAppStore((s) => s.selectedRoom);
+  const selectHome = useAppStore((s) => s.selectHome);
   const selectRoom = useAppStore((s) => s.selectRoom);
   const sendCommand = useAppStore((s) => s.sendCommand);
   const token = useAppStore((s) => s.token);
   const user = useAppStore((s) => s.user);
 
-  const [homeName, setHomeName] = useState('');
-  const [showCreateHome, setShowCreateHome] = useState(false);
-  const [roomName, setRoomName] = useState('');
-  const [roomFloor, setRoomFloor] = useState('');
-  const [roomType, setRoomType] = useState('');
-  const [showCreateRoom, setShowCreateRoom] = useState(false);
-  const [deviceForm, setDeviceForm] = useState({ deviceId: '', name: '', type: '', roomId: '', secret: '' });
+  const [createHomeOpen, setCreateHomeOpen] = useState(false);
+  const [homeDraft, setHomeDraft] = useState({ name: '', timezone: 'Asia/Shanghai', address: '' });
+  const [homeMetaDraft, setHomeMetaDraft] = useState({ name: '', timezone: 'Asia/Shanghai', address: '' });
+  const [createRoomOpen, setCreateRoomOpen] = useState(false);
+  const [roomDraft, setRoomDraft] = useState({ name: '', floor: '', type: '' });
+  const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+  const [roomEditDraft, setRoomEditDraft] = useState({ name: '', floor: '', type: '' });
+  const [createDeviceOpen, setCreateDeviceOpen] = useState(false);
+  const [deviceSecret, setDeviceSecret] = useState('');
+  const [deviceForm, setDeviceForm] = useState({ deviceId: '', name: '', type: '' });
 
   const { data: homes = [] } = useHomes();
-  const { data: rooms = [] } = useRooms(selectedHome);
-  const { data: devices = [] } = useDevices(selectedHome);
+  const { data: structure } = useHomeStructure(selectedHome);
   const { data: automations = [] } = useAutomations(selectedHome);
 
-  const onlineCount = devices.filter((item) => item.status === 'online').length;
-  const enabledAutomations = automations.filter((item) => item.enabled).length;
+  const currentHome = structure?.home || homes.find((home) => home.id === selectedHome);
+  const rooms = structure?.rooms ?? [];
+  const currentRoom = rooms.find((room) => room.id === selectedRoom) ?? rooms[0];
+  const currentDevices = currentRoom?.devices ?? [];
+
+  const enabledAutomations = useMemo(
+    () => automations.filter((automation) => automation.enabled).length,
+    [automations],
+  );
 
   useEffect(() => {
-    if (!selectedRoom && rooms.length) selectRoom(rooms[0].id);
-  }, [rooms, selectedRoom, selectRoom]);
-
-  useEffect(() => {
-    if (selectedRoom && !deviceForm.roomId) {
-      setDeviceForm((prev) => ({ ...prev, roomId: selectedRoom }));
+    if (!selectedHome && homes.length) {
+      selectHome(homes[0].id);
     }
-  }, [selectedRoom, deviceForm.roomId]);
+  }, [homes, selectedHome, selectHome]);
 
-  const hasHome = !!selectedHome;
-  const hasRoom = rooms.length > 0;
-  const filteredDevices = devices.filter((item) => !selectedRoom || item.roomId === selectedRoom);
-  const [showCreateDevice, setShowCreateDevice] = useState(false);
+  useEffect(() => {
+    if (!selectedHome || !currentHome) return;
+    setHomeMetaDraft({
+      name: currentHome.name || '',
+      timezone: currentHome.timezone || 'Asia/Shanghai',
+      address: currentHome.address || '',
+    });
+  }, [selectedHome, currentHome?.id, currentHome?.name, currentHome?.timezone, currentHome?.address]);
+
+  useEffect(() => {
+    if (!rooms.length) {
+      if (selectedRoom) selectRoom(undefined);
+      return;
+    }
+
+    const roomStillExists = selectedRoom && rooms.some((room) => room.id === selectedRoom);
+    if (!roomStillExists) {
+      selectRoom(structure?.selectedRoomId || rooms[0]?.id);
+    }
+  }, [rooms, selectedRoom, selectRoom, structure?.selectedRoomId]);
+
+  const refreshHomeContext = async (homeId: string) => {
+    await Promise.all([
+      mutate('/api/homes'),
+      mutate(`/api/homes/${homeId}/structure`),
+      mutate(`/api/homes/${homeId}/rooms`),
+      mutate(`/api/homes/${homeId}/devices`),
+      mutate(`/api/homes/${homeId}/automations`),
+    ]);
+  };
 
   return (
     <div className="space-y-6">
-      <section className="surface-panel relative overflow-hidden p-5 sm:p-6">
-        <div className="ambient-orb -left-12 top-8 bg-[oklch(0.73_0.13_220_/_45%)]" />
-        <div className="ambient-orb -right-10 -bottom-20 bg-[oklch(0.76_0.08_176_/_45%)] [animation-delay:0.35s]" />
-        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <p className="section-eyebrow">Home Topology</p>
-            <h2 className="mt-1 text-2xl font-semibold sm:text-3xl">家庭 / 房间 / 设备总览</h2>
+      <section className="surface-panel relative overflow-hidden px-5 py-6 sm:px-6">
+        <div className="ambient-orb -left-14 top-10 bg-[oklch(0.74_0.13_220_/_40%)]" />
+        <div className="ambient-orb -right-10 bottom-0 bg-[oklch(0.79_0.08_176_/_42%)] [animation-delay:0.4s]" />
+        <div className="relative flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-3xl">
+            <p className="section-eyebrow">Operator Workspace</p>
+            <h2 className="mt-1 text-2xl font-semibold sm:text-3xl">先锁定家庭，再进入房间上下文处理设备</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              以家庭为边界组织设备链路，统一承载命令下发、自动化执行与前台模型对话。
+              首页现在围绕“家庭、房间、设备”这条管理顺序展开，避免在同一屏里同时做太多不相关操作。
             </p>
           </div>
-          <div className="flex w-full flex-wrap items-end gap-2 lg:w-auto lg:justify-end">
-            <HomeSelector />
-            <Button size="sm" variant="outline" onClick={() => setShowCreateHome((value) => !value)}>
-              {showCreateHome ? '收起创建' : '创建家庭'}
-            </Button>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/automations">
+              <Button size="sm" variant="outline">管理自动化</Button>
+            </Link>
+            <Link to="/chat">
+              <Button size="sm" variant="outline">进入对话助手</Button>
+            </Link>
+            <Link to="/observability">
+              <Button size="sm">查看观测面板</Button>
+            </Link>
           </div>
-        </div>
-        <div className="relative mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="家庭数" value={String(homes.length)} hint="当前可访问家庭" />
-          <StatCard label="房间数" value={String(rooms.length)} hint="当前家庭房间总量" />
-          <StatCard label="设备在线" value={`${onlineCount}/${devices.length || 0}`} hint="基于状态快照" />
-          <StatCard label="自动化启用" value={`${enabledAutomations}/${automations.length || 0}`} hint="确定性规则引擎" />
         </div>
       </section>
 
-      {(!homes.length || showCreateHome) && (
-        <Card className="surface-panel">
-          <CardHeader className="text-sm font-semibold">创建家庭</CardHeader>
-          <CardContent className="space-y-2">
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input placeholder="家庭名称" value={homeName} onChange={(e) => setHomeName(e.target.value)} />
-              <Button
-                disabled={!homeName || !user}
-                onClick={async () => {
-                  if (!homeName || !user) return;
-                  const home = await api.createHome({ name: homeName, ownerId: user.id }, token);
-                  setHomeName('');
-                  setShowCreateHome(false);
-                  mutate('/api/homes');
-                  useAppStore.setState({ selectedHome: home.id });
-                }}
-              >
-                创建
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">建议按真实地理位置命名，便于后续自动化策略按家庭隔离。</p>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid gap-4 xl:grid-cols-[1fr_1.7fr]">
-        <Card className="surface-panel">
-          <CardHeader className="flex flex-wrap items-center justify-between gap-2 text-sm font-semibold">
-            <span>房间管理</span>
-            {hasHome && (
-              <Button size="sm" variant="outline" onClick={() => setShowCreateRoom((value) => !value)}>
-                {showCreateRoom ? '收起创建' : '创建房间'}
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {rooms.length === 0 && <div className="text-xs text-muted-foreground">暂无房间</div>}
-            {showCreateRoom || (!rooms.length && hasHome) ? (
-              <div className="space-y-2 rounded-xl border border-border/80 p-3">
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <Input placeholder="房间名称" value={roomName} onChange={(e) => setRoomName(e.target.value)} />
-                  <Input placeholder="楼层(可选)" value={roomFloor} onChange={(e) => setRoomFloor(e.target.value)} />
-                  <Input placeholder="类型(可选)" value={roomType} onChange={(e) => setRoomType(e.target.value)} />
-                </div>
-                <Button
-                  disabled={!roomName || !hasHome}
-                  onClick={async () => {
-                    await api.createRoom(selectedHome!, { name: roomName, floor: roomFloor || undefined, type: roomType || undefined }, token);
-                    setRoomName('');
-                    setRoomFloor('');
-                    setRoomType('');
-                    setShowCreateRoom(false);
-                    mutate(`/api/homes/${selectedHome}/rooms`);
-                  }}
-                >
-                  创建房间
-                </Button>
+      <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <aside className="space-y-4">
+          <Card className="surface-panel">
+            <CardHeader className="flex items-center justify-between gap-2">
+              <div>
+                <div className="text-sm font-semibold">家庭列表</div>
+                <div className="mt-1 text-xs text-muted-foreground">从这里切换当前工作上下文。</div>
               </div>
-            ) : null}
-            <div className="flex flex-wrap gap-2">
-              {rooms.map((r) => (
-                <Button
-                  key={r.id}
-                  size="sm"
-                  variant={selectedRoom === r.id ? 'default' : 'secondary'}
-                  className="px-3"
-                  onClick={() => selectRoom(r.id)}
-                  disabled={!hasHome}
-                >
-                  {r.name}
-                </Button>
+              <Button size="sm" variant="outline" onClick={() => setCreateHomeOpen((open) => !open)}>
+                {createHomeOpen ? '收起' : '新建'}
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {homes.length === 0 ? <Alert className="text-xs">先创建一个家庭，后续房间和设备都会归到这个边界里。</Alert> : null}
+              {homes.map((home) => (
+                <HomeCard
+                  key={home.id}
+                  home={home}
+                  active={selectedHome === home.id}
+                  onClick={() => selectHome(home.id)}
+                />
               ))}
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card className="surface-panel">
-          <CardHeader className="flex items-center justify-between">
-            <div className="text-sm font-semibold">策略与协作入口</div>
-            <Link to="/automations" className="text-xs font-medium text-primary hover:underline">
-              管理自动化
-            </Link>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            <SectionTitle
-              title="先规则，后对话"
-              subtitle="自动化页用于维护确定性规则；对话页负责解释状态和草拟新规则。"
-            />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Link
-                to="/automations"
-                className="surface-panel relative block rounded-xl p-3 text-xs text-muted-foreground transition hover:-translate-y-px hover:text-foreground"
-              >
-                <div className="section-eyebrow">Deterministic</div>
-                <div className="mt-1 text-sm font-medium text-foreground">自动化规则编排</div>
-                <p className="mt-1 leading-relaxed">维护 JSON 规则、启停策略并手动触发验证。</p>
-              </Link>
-              <Link
-                to="/chat"
-                className="surface-panel relative block rounded-xl p-3 text-xs text-muted-foreground transition hover:-translate-y-px hover:text-foreground"
-              >
-                <div className="section-eyebrow">Copilot</div>
-                <div className="mt-1 text-sm font-medium text-foreground">前台对话助手</div>
-                <p className="mt-1 leading-relaxed">通过自然语言查询状态、生成可执行的策略草案。</p>
-              </Link>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Link
-                to="/observability"
-                className="rounded-full border border-border bg-white/85 px-3 py-1 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
-              >
-                打开观测面板
-              </Link>
-              <Link
-                to="/chat"
-                className="rounded-full border border-border bg-white/85 px-3 py-1 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
-              >
-                发起会话
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="surface-panel">
-        <CardHeader className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <div className="text-sm font-semibold">设备与命令链路</div>
-            <p className="mt-1 text-xs text-muted-foreground">设备能力展示、属性快照与方法调用统一在此处完成。</p>
-          </div>
-          <div className="data-pill">
-            当前筛选房间: {rooms.find((item) => item.id === selectedRoom)?.name || '未选择'}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="text-sm font-semibold">设备列表</div>
-            {hasHome && hasRoom && (
-              <Button size="sm" variant="outline" onClick={() => setShowCreateDevice((value) => !value)}>
-                {showCreateDevice ? '收起创建' : '预注册设备'}
-              </Button>
-            )}
-          </div>
-
-          {!hasHome && <Alert className="mb-3 text-xs">请先创建或选择家庭，再管理设备。</Alert>}
-          {hasHome && !hasRoom && <Alert className="mb-3 text-xs">当前家庭暂无房间，请先创建房间再预注册设备。</Alert>}
-
-          {hasHome && hasRoom && showCreateDevice && (
-            <div className="mb-3 space-y-2 rounded-xl border border-border/80 bg-white/65 p-3 text-xs">
-              <div className="text-sm font-semibold">预注册设备</div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <Input
-                  placeholder="设备ID"
-                  value={deviceForm.deviceId}
-                  onChange={(e) => setDeviceForm({ ...deviceForm, deviceId: e.target.value })}
-                />
-                <Input placeholder="名称" value={deviceForm.name} onChange={(e) => setDeviceForm({ ...deviceForm, name: e.target.value })} />
-                <Input
-                  placeholder="类型(可选)"
-                  value={deviceForm.type}
-                  onChange={(e) => setDeviceForm({ ...deviceForm, type: e.target.value })}
-                />
-                <select
-                  className="h-10 rounded-md border border-border bg-white px-2 text-sm"
-                  value={deviceForm.roomId}
-                  onChange={(e) => setDeviceForm({ ...deviceForm, roomId: e.target.value })}
-                >
-                  <option value="">选择房间</option>
-                  {rooms.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <Button
-                disabled={!deviceForm.deviceId || !deviceForm.name || !deviceForm.roomId}
-                onClick={async () => {
-                  const res = await api.preRegisterDevice(selectedHome!, {
-                    roomId: deviceForm.roomId,
-                    deviceId: deviceForm.deviceId,
-                    name: deviceForm.name,
-                    type: deviceForm.type || undefined,
-                    category: 'both',
-                  }, token);
-                  setDeviceForm({ ...deviceForm, secret: res.secret });
-                  mutate(`/api/homes/${selectedHome}/devices`);
-                }}
-              >
-                预注册
-              </Button>
-              {deviceForm.secret && <Alert className="text-xs">设备密钥：{deviceForm.secret}</Alert>}
-            </div>
-          )}
-          {filteredDevices.length === 0 ? (
-            <div className="text-xs text-muted-foreground">暂无设备</div>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              {filteredDevices.map((item) => (
-                <article key={item.deviceId} className="surface-panel relative overflow-hidden rounded-xl p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="font-semibold">{item.name}</div>
-                      <div className="text-xs text-muted-foreground">{item.deviceId}</div>
-                    </div>
-                    <span
-                      className={`rounded-full border px-2 py-0.5 text-xs ${
-                        item.status === 'online'
-                          ? 'status-live border-emerald-200 bg-emerald-50 text-emerald-700'
-                          : 'border-slate-200 bg-slate-100 text-slate-500'
-                      }`}
+              {createHomeOpen ? (
+                <div className="rounded-[1.15rem] border border-border/80 bg-white/72 p-4">
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="家庭名称"
+                      value={homeDraft.name}
+                      onChange={(e) => setHomeDraft((draft) => ({ ...draft, name: e.target.value }))}
+                    />
+                    <Input
+                      placeholder="时区"
+                      value={homeDraft.timezone}
+                      onChange={(e) => setHomeDraft((draft) => ({ ...draft, timezone: e.target.value }))}
+                    />
+                    <Input
+                      placeholder="地址（可选）"
+                      value={homeDraft.address}
+                      onChange={(e) => setHomeDraft((draft) => ({ ...draft, address: e.target.value }))}
+                    />
+                    <Button
+                      className="w-full"
+                      disabled={!homeDraft.name.trim()}
+                      onClick={async () => {
+                        const created = await api.createHome(
+                          {
+                            name: homeDraft.name.trim(),
+                            timezone: homeDraft.timezone.trim() || 'Asia/Shanghai',
+                            address: homeDraft.address.trim() || undefined,
+                            ownerId: user?.id,
+                          },
+                          token,
+                        );
+                        setHomeDraft({ name: '', timezone: 'Asia/Shanghai', address: '' });
+                        setCreateHomeOpen(false);
+                        await mutate('/api/homes');
+                        selectHome(created.id);
+                      }}
                     >
-                      {item.status === 'online' ? '在线' : '离线'}
-                    </span>
+                      创建家庭
+                    </Button>
                   </div>
-                  <div className="mt-3 space-y-1 text-xs">
-                    {item.attrs && Object.keys(item.attrs).length > 0 ? (
-                      Object.entries(item.attrs).map(([key, value]) => (
-                        <div key={key} className="flex items-center justify-between gap-3 rounded bg-muted/40 px-2 py-1">
-                          <span className="text-muted-foreground">{key}</span>
-                          <span>{String(value)}</span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-muted-foreground">暂无属性快照</div>
-                    )}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          <Card className="surface-panel">
+            <CardHeader className="text-sm font-semibold">建议操作顺序</CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              <p>1. 先创建家庭，确认这是你当前要管理的真实空间。</p>
+              <p>2. 再把房间按实际使用场景拆开，例如客厅、主卧、书房。</p>
+              <p>3. 最后在对应房间里预注册设备，命令和自动化才会自然落位。</p>
+            </CardContent>
+          </Card>
+        </aside>
+
+        <div className="space-y-5">
+          {currentHome ? (
+            <section className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+              <div className="surface-panel relative overflow-hidden p-5 sm:p-6">
+                <div className="flex flex-col gap-5">
+                  <div>
+                    <p className="section-eyebrow">Current Home</p>
+                    <h3 className="mt-1 text-2xl font-semibold">{currentHome.name}</h3>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      当前家庭是所有房间、设备、自动化和对话上下文的根节点。
+                    </p>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-1">
-                    {(item.capabilities || []).slice(0, 4).map((cap) => (
-                      <span
-                        key={`${item.deviceId}-${cap.kind}-${cap.name}`}
-                        className="rounded-full bg-muted px-2 py-0.5 text-[11px]"
-                      >
-                        {cap.kind}:{cap.name}
-                      </span>
-                    ))}
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <MetricTile label="房间" value={String(currentHome.roomsCount ?? rooms.length)} hint="当前家庭的空间数量" />
+                    <MetricTile label="设备" value={String(currentHome.devicesCount ?? 0)} hint="已归属到房间的设备" />
+                    <MetricTile label="在线" value={String(currentHome.onlineDevicesCount ?? 0)} hint="最近仍在线的设备" />
+                    <MetricTile label="自动化" value={`${enabledAutomations}/${automations.length || 0}`} hint="已启用规则 / 全部规则" />
                   </div>
-                  <form
-                    className="mt-3 space-y-2"
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      const form = e.target as HTMLFormElement;
-                      const method = (form.elements.namedItem('method') as HTMLInputElement).value;
-                      const raw = (form.elements.namedItem('value') as HTMLInputElement).value.trim();
-                      let value: unknown = raw;
-                      if (raw) {
-                        try {
-                          value = JSON.parse(raw);
-                        } catch {
-                          value = raw;
-                        }
-                      }
-                      await sendCommand(item.deviceId, method, raw ? { value } : {});
-                      form.reset();
+                </div>
+              </div>
+
+              <Card className="surface-panel">
+                <CardHeader>
+                  <div className="text-sm font-semibold">家庭信息</div>
+                  <div className="mt-1 text-xs text-muted-foreground">把常改字段放在这里，就近维护。</div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Input
+                    placeholder="家庭名称"
+                    value={homeMetaDraft.name}
+                    onChange={(e) => setHomeMetaDraft((draft) => ({ ...draft, name: e.target.value }))}
+                  />
+                  <Input
+                    placeholder="时区"
+                    value={homeMetaDraft.timezone}
+                    onChange={(e) => setHomeMetaDraft((draft) => ({ ...draft, timezone: e.target.value }))}
+                  />
+                  <Input
+                    placeholder="地址（可选）"
+                    value={homeMetaDraft.address}
+                    onChange={(e) => setHomeMetaDraft((draft) => ({ ...draft, address: e.target.value }))}
+                  />
+                  <Button
+                    disabled={!homeMetaDraft.name.trim()}
+                    onClick={async () => {
+                      await api.updateHome(
+                        currentHome.id,
+                        {
+                          name: homeMetaDraft.name.trim(),
+                          timezone: homeMetaDraft.timezone.trim() || undefined,
+                          address: homeMetaDraft.address.trim() || undefined,
+                        },
+                        token,
+                      );
+                      await refreshHomeContext(currentHome.id);
                     }}
                   >
-                    <Input
-                      name="method"
-                      placeholder="方法名"
-                      defaultValue={item.capabilities?.find((cap) => cap.kind === 'method')?.name || 'set_led'}
-                    />
-                    <Input name="value" placeholder='参数值，支持 JSON，例如 {"value":1}' />
-                    <Button type="submit" size="sm" className="w-full">
-                      下发命令
-                    </Button>
-                  </form>
-                </article>
-              ))}
-            </div>
+                    保存家庭信息
+                  </Button>
+                </CardContent>
+              </Card>
+            </section>
+          ) : (
+            <Alert>还没有可用家庭。先在左侧创建一个家庭，再继续布置房间和设备。</Alert>
           )}
-        </CardContent>
-      </Card>
+
+          <div className="grid gap-5 2xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)]">
+            <Card className="surface-panel">
+              <CardHeader className="flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-sm font-semibold">房间管理</div>
+                  <div className="mt-1 text-xs text-muted-foreground">房间是设备归档和命令上下文的直接载体。</div>
+                </div>
+                {selectedHome ? (
+                  <Button size="sm" variant="outline" onClick={() => setCreateRoomOpen((open) => !open)}>
+                    {createRoomOpen ? '收起' : '添加房间'}
+                  </Button>
+                ) : null}
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!selectedHome ? <Alert className="text-xs">先选择一个家庭，房间才能归到正确的边界里。</Alert> : null}
+
+                {createRoomOpen && selectedHome ? (
+                  <div className="rounded-[1.15rem] border border-border/80 bg-white/72 p-4">
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <Input
+                        placeholder="房间名称"
+                        value={roomDraft.name}
+                        onChange={(e) => setRoomDraft((draft) => ({ ...draft, name: e.target.value }))}
+                      />
+                      <Input
+                        placeholder="楼层"
+                        value={roomDraft.floor}
+                        onChange={(e) => setRoomDraft((draft) => ({ ...draft, floor: e.target.value }))}
+                      />
+                      <Input
+                        placeholder="类型"
+                        value={roomDraft.type}
+                        onChange={(e) => setRoomDraft((draft) => ({ ...draft, type: e.target.value }))}
+                      />
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        disabled={!roomDraft.name.trim()}
+                        onClick={async () => {
+                          const room = await api.createRoom(
+                            selectedHome,
+                            {
+                              name: roomDraft.name.trim(),
+                              floor: roomDraft.floor.trim() || undefined,
+                              type: roomDraft.type.trim() || undefined,
+                            },
+                            token,
+                          );
+                          setRoomDraft({ name: '', floor: '', type: '' });
+                          setCreateRoomOpen(false);
+                          await refreshHomeContext(selectedHome);
+                          selectRoom(room.id);
+                        }}
+                      >
+                        创建房间
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setCreateRoomOpen(false)}>
+                        取消
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {rooms.length === 0 && selectedHome ? <Alert className="text-xs">这个家庭还没有房间，先添加一个空间再放设备。</Alert> : null}
+
+                <div className="space-y-3">
+                  {rooms.map((room) => (
+                    <RoomCard
+                      key={room.id}
+                      room={room}
+                      active={currentRoom?.id === room.id}
+                      editing={editingRoomId === room.id}
+                      draft={editingRoomId === room.id ? roomEditDraft : { name: room.name, floor: room.floor || '', type: room.type || '' }}
+                      onSelect={() => selectRoom(room.id)}
+                      onDraftChange={(field, value) => setRoomEditDraft((draft) => ({ ...draft, [field]: value }))}
+                      onStartEdit={() => {
+                        setEditingRoomId(room.id);
+                        setRoomEditDraft({
+                          name: room.name,
+                          floor: room.floor || '',
+                          type: room.type || '',
+                        });
+                      }}
+                      onCancelEdit={() => setEditingRoomId(null)}
+                      onSave={async () => {
+                        await api.updateRoom(
+                          room.id,
+                          {
+                            name: roomEditDraft.name.trim(),
+                            floor: roomEditDraft.floor.trim() || undefined,
+                            type: roomEditDraft.type.trim() || undefined,
+                          },
+                          token,
+                        );
+                        setEditingRoomId(null);
+                        if (selectedHome) {
+                          await refreshHomeContext(selectedHome);
+                        }
+                      }}
+                    />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="surface-panel">
+              <CardHeader className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-sm font-semibold">当前房间设备</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {currentRoom ? `所有设备和快捷命令都绑定到 ${currentRoom.name}。` : '先选择一个房间，设备操作才有明确上下文。'}
+                  </div>
+                </div>
+                {selectedHome && currentRoom ? (
+                  <Button size="sm" variant="outline" onClick={() => setCreateDeviceOpen((open) => !open)}>
+                    {createDeviceOpen ? '收起' : '预注册设备'}
+                  </Button>
+                ) : null}
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {!currentRoom ? <Alert className="text-xs">还没有选中房间。先在左侧创建或选择一个房间。</Alert> : null}
+
+                {createDeviceOpen && selectedHome && currentRoom ? (
+                  <div className="rounded-[1.15rem] border border-border/80 bg-white/72 p-4">
+                    <div className="text-sm font-semibold">将新设备归入当前房间</div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      <Input
+                        placeholder="设备 ID"
+                        value={deviceForm.deviceId}
+                        onChange={(e) => setDeviceForm((form) => ({ ...form, deviceId: e.target.value }))}
+                      />
+                      <Input
+                        placeholder="设备名称"
+                        value={deviceForm.name}
+                        onChange={(e) => setDeviceForm((form) => ({ ...form, name: e.target.value }))}
+                      />
+                      <Input
+                        placeholder="类型（可选）"
+                        value={deviceForm.type}
+                        onChange={(e) => setDeviceForm((form) => ({ ...form, type: e.target.value }))}
+                      />
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        disabled={!deviceForm.deviceId.trim() || !deviceForm.name.trim()}
+                        onClick={async () => {
+                          const res = await api.preRegisterDevice(
+                            selectedHome,
+                            {
+                              roomId: currentRoom.id,
+                              deviceId: deviceForm.deviceId.trim(),
+                              name: deviceForm.name.trim(),
+                              type: deviceForm.type.trim() || undefined,
+                              category: 'both',
+                            },
+                            token,
+                          );
+                          setDeviceSecret(res.secret);
+                          setDeviceForm({ deviceId: '', name: '', type: '' });
+                          await refreshHomeContext(selectedHome);
+                        }}
+                      >
+                        预注册
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setCreateDeviceOpen(false)}>
+                        取消
+                      </Button>
+                    </div>
+                    {deviceSecret ? <Alert className="mt-3 text-xs">设备密钥：{deviceSecret}</Alert> : null}
+                  </div>
+                ) : null}
+
+                {currentRoom && currentDevices.length === 0 ? <Alert className="text-xs">这个房间还没有设备，先预注册一台设备开始联调。</Alert> : null}
+
+                {currentRoom && currentDevices.length > 0 ? (
+                  <div className="grid gap-3 xl:grid-cols-2">
+                    {currentDevices.map((device) => (
+                      <DevicePanel
+                        key={device.deviceId}
+                        device={device}
+                        onSendCommand={(deviceId, method, params, roomId) => sendCommand(deviceId, method, params, roomId)}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -408,4 +661,3 @@ export const Route = createRoute({
   path: '/',
   component: Dashboard,
 });
-
