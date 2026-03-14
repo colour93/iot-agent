@@ -253,12 +253,20 @@ export function createDeviceRoutes(dataSource: DataSource, mqttClient: import('m
     await cmdRepo.save(command);
 
     try {
-      await sendCommand(mqttClient, deviceId, {
-        cmdId,
-        method: method.trim(),
-        params: command.params,
-        timeout: 5000,
-      });
+      await sendCommand(
+        mqttClient,
+        {
+          deviceId,
+          homeId: command.homeId,
+          roomId: command.roomId,
+        },
+        {
+          cmdId,
+          method: method.trim(),
+          params: command.params,
+          timeout: 5000,
+        },
+      );
     } catch (err) {
       command.status = 'failed';
       command.error = 'mqtt_publish_failed';

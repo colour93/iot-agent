@@ -300,12 +300,20 @@ function buildHomeTools(
     });
     await commandsRepo.save(command);
 
-    await sendCommand(mqttClient, device.deviceId, {
-      cmdId,
-      method: input.method,
-      params: input.params ?? {},
-      timeout: COMMAND_TIMEOUT_MS,
-    });
+    await sendCommand(
+      mqttClient,
+      {
+        deviceId: device.deviceId,
+        homeId,
+        roomId: device.room?.id,
+      },
+      {
+        cmdId,
+        method: input.method,
+        params: input.params ?? {},
+        timeout: COMMAND_TIMEOUT_MS,
+      },
+    );
 
     const waitMs = Math.min(
       Math.max(input.awaitAckMs ?? 0, 0),

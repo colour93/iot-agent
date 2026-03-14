@@ -10,7 +10,7 @@ import {
   DeviceEvent,
   TelemetryLog,
 } from '../entities/index.js';
-import { topicOf } from '../utils/topics.js';
+import { parseInboundTopic, topicCandidates } from '../utils/topics.js';
 import { mqttState } from '../state/mqttState.js';
 
 interface RegisterPayload {
@@ -62,30 +62,46 @@ export function startMqttService(dataSource: DataSource) {
     logger.info('MQTT connected');
     mqttState.connected = true;
     mqttState.lastError = undefined;
-    client.subscribe('device/+/register');
-    client.subscribe('device/+/telemetry');
-    client.subscribe('device/+/event/+');
-    client.subscribe('device/+/command/ack');
-    client.subscribe('device/+/lwt/status');
+    const topicPatterns = [
+      'device/+/register',
+      'device/+/telemetry',
+      'device/+/event/+',
+      'device/+/command/ack',
+      'device/+/lwt/status',
+      'home/+/room/+/device/+/register',
+      'home/+/room/+/device/+/telemetry',
+      'home/+/room/+/device/+/event/+',
+      'home/+/room/+/device/+/command/ack',
+      'home/+/room/+/device/+/lwt/status',
+    ];
+    for (const pattern of topicPatterns) {
+      client.subscribe(pattern);
+    }
   });
 
   client.on('message', async (topic, buffer) => {
     logger.debug({ topic, payload: buffer.toString() }, 'MQTT message received');
     try {
       const payload = JSON.parse(buffer.toString());
-      const parts = topic.split('/');
-      const deviceId = parts[1];
-      if (topic.endsWith('/register')) {
-        await handleRegister(dataSource, client, deviceId, payload as RegisterPayload);
-      } else if (topic.endsWith('/telemetry')) {
-        await handleTelemetry(dataSource, client, deviceId, payload as TelemetryPayload);
-      } else if (topic.includes('/event/')) {
-        const eventType = parts[3];
-        await handleEvent(dataSource, client, deviceId, eventType, payload as EventPayload);
-      } else if (topic.endsWith('/command/ack')) {
+      const parsedTopic = parseInboundTopic(topic);
+      if (!parsedTopic) return;
+
+      if (parsedTopic.kind === 'register') {
+        await handleRegister(dataSource, client, parsedTopic, payload as RegisterPayload);
+      } else if (parsedTopic.kind === 'telemetry') {
+        await handleTelemetry(dataSource, client, parsedTopic.deviceId, payload as TelemetryPayload);
+      } else if (parsedTopic.kind === 'event') {
+        await handleEvent(
+          dataSource,
+          client,
+          parsedTopic.deviceId,
+          parsedTopic.eventType ?? '',
+          payload as EventPayload,
+        );
+      } else if (parsedTopic.kind === 'commandAck') {
         await handleCommandAck(dataSource, payload as CommandAckPayload);
-      } else if (topic.endsWith('/lwt/status')) {
-        await handleLwt(dataSource, deviceId, payload as LwtPayload);
+      } else if (parsedTopic.kind === 'lwtStatus') {
+        await handleLwt(dataSource, parsedTopic.deviceId, payload as LwtPayload);
       }
     } catch (err) {
       logger.error({ err }, 'MQTT message error');
@@ -126,16 +142,21 @@ function triggerAutomationAsync(
 async function handleRegister(
   dataSource: DataSource,
   client: MqttClient,
-  deviceIdFromTopic: string,
+  topicInfo: {
+    deviceId: string;
+    homeId?: string;
+    roomId?: string;
+    scheme: 'legacy' | 'hierarchical';
+  },
   payload: RegisterPayload,
 ) {
   const deviceRepo = dataSource.getRepository(Device);
   const device = await deviceRepo.findOne({
-    where: { deviceId: payload.deviceId || deviceIdFromTopic },
+    where: { deviceId: payload.deviceId || topicInfo.deviceId },
     relations: ['room', 'room.home'],
   });
   if (!device) {
-    logger.warn({ deviceId: payload.deviceId || deviceIdFromTopic }, 'Register failed: device not pre-registered');
+    logger.warn({ deviceId: payload.deviceId || topicInfo.deviceId }, 'Register failed: device not pre-registered');
     return;
   }
   device.status = 'online';
@@ -152,20 +173,26 @@ async function handleRegister(
   }
   await deviceRepo.save(device);
 
-  const ackTopic = topicOf(device.deviceId, 'register/ack');
-  client.publish(
-    ackTopic,
-    JSON.stringify({
-      status: 'ok',
-      heartbeat: 30,
-      expectAttrs: payload.capabilities
-        ?.filter((c) => c.kind === 'attr')
-        .map((c) => c.name),
-      serverTs: Date.now(),
-      config: { telemetryInterval: 60 },
-    }),
-    { qos: 1 },
+  const ackPayload = JSON.stringify({
+    status: 'ok',
+    heartbeat: 30,
+    expectAttrs: payload.capabilities
+      ?.filter((c) => c.kind === 'attr')
+      .map((c) => c.name),
+    serverTs: Date.now(),
+    config: { telemetryInterval: 60 },
+  });
+  const ackTopics = topicCandidates(
+    {
+      deviceId: device.deviceId,
+      homeId: topicInfo.homeId ?? device.room?.home?.id,
+      roomId: topicInfo.roomId ?? device.room?.id,
+    },
+    'register/ack',
   );
+  for (const ackTopic of ackTopics) {
+    client.publish(ackTopic, ackPayload, { qos: 1 });
+  }
   logger.info({ deviceId: payload.deviceId }, 'Register handled');
 }
 
@@ -266,12 +293,15 @@ async function handleCommandAck(dataSource: DataSource, payload: CommandAckPaylo
 
 export async function sendCommand(
   client: MqttClient,
-  deviceId: string,
+  route: string | { deviceId: string; homeId?: string; roomId?: string },
   payload: { cmdId: string; method: string; params: Record<string, unknown>; timeout?: number },
 ) {
-  const topic = topicOf(deviceId, 'command');
-  logger.debug({ topic, payload }, 'MQTT publish command');
-  client.publish(topic, JSON.stringify(payload), { qos: 1 });
+  const normalizedRoute = typeof route === 'string' ? { deviceId: route } : route;
+  const topics = topicCandidates(normalizedRoute, 'command');
+  for (const topic of topics) {
+    logger.debug({ topic, payload }, 'MQTT publish command');
+    client.publish(topic, JSON.stringify(payload), { qos: 1 });
+  }
 }
 
 export async function markTimeouts(dataSource: DataSource, timeoutMs = 5000) {

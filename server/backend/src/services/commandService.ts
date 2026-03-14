@@ -31,11 +31,19 @@ export async function retryTimeouts(
     cmd.status = 'sent';
     cmd.sentAt = new Date();
     await repo.save(cmd);
-    await sendCommand(mqttClient, cmd.device.deviceId, {
-      cmdId: cmd.cmdId,
-      method: cmd.method,
-      params: cmd.params,
-      timeout: timeoutMs,
-    });
+    await sendCommand(
+      mqttClient,
+      {
+        deviceId: cmd.device.deviceId,
+        homeId: cmd.homeId,
+        roomId: cmd.roomId,
+      },
+      {
+        cmdId: cmd.cmdId,
+        method: cmd.method,
+        params: cmd.params,
+        timeout: timeoutMs,
+      },
+    );
   }
 }

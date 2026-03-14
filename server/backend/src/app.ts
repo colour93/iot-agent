@@ -9,6 +9,8 @@ import cors from 'cors';
 import { initRedis } from './services/redisClient.js';
 import { sweepCommandTimeouts, retryTimeouts } from './services/commandService.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { startAutomationScheduler } from './services/automationScheduler.js';
+import { refreshAllHomeExternalData } from './services/externalDataService.js';
 
 async function bootstrap() {
   const dataSource = await initDataSource();
@@ -40,6 +42,17 @@ async function bootstrap() {
   setInterval(() => {
     retryTimeouts(dataSource, mqttClient, 5000, 2).catch((err) => logger.error(err));
   }, 10000);
+
+  // 自动化时间调度（按分钟 tick）
+  startAutomationScheduler(dataSource, mqttClient);
+
+  // 外部数据（天气/季节）定时刷新
+  setInterval(() => {
+    refreshAllHomeExternalData(dataSource).catch((err) => logger.error({ err }, 'refresh external data failed'));
+  }, 15 * 60 * 1000);
+  refreshAllHomeExternalData(dataSource).catch((err) =>
+    logger.warn({ err }, 'initial external data refresh failed'),
+  );
 }
 
 bootstrap().catch((err) => {
