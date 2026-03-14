@@ -9,6 +9,9 @@
   - time/cron 调度：`time` 条件按 cron 真实匹配，新增按分钟自动调度执行。
   - 固件抽象化：ESP32 固件拆分为传感器/触发器基类与派生实现，替换单文件 demo 结构。
   - 家庭隔离强化：新增 `GET /api/homes/:homeId/commands`（home 维度过滤），并为 LLM/自动化/命令查询链路补充审计日志。
+- P2 阶段新增完成：
+  - 生产安全收敛：CORS 白名单校验落地、JWT 强密钥校验（生产环境强制）、MQTT TLS 配置与生产约束。
+  - 运维能力（无 Prometheus 依赖）：新增指标告警阈值配置与 `metrics/alerts` 接口，补充 home 维度审计日志查询。
 
 ### Summary
 - 目标：把“可演示系统”补齐为“需求闭环系统”，优先完成家庭隔离、自动化事件驱动、命令闭环、NL 创建自动化。
@@ -27,6 +30,9 @@
 - 全智能模式新增统一决策结构：`mode + goals + policy + decision`，LLM 仅输出结构化决策（JSON），由策略护栏校验后执行。
 - 新增 `GET /api/homes/:homeId/commands`：按 `homeId` 查询命令历史，支持 `status`/`deviceId`/`limit` 过滤。
 - 查询审计落地：LLM 会话、自动化列表、命令历史查询统一写入 `audit_logs`。
+- 新增 `GET /api/metrics/alerts` 与 `GET /api/homes/:homeId/metrics/alerts`：按阈值输出当前告警列表。
+- 新增 `GET /api/homes/:homeId/metrics/summary`：家庭维度指标聚合。
+- 新增 `GET /api/homes/:homeId/audit-logs`：家庭维度审计日志查询（支持 `limit/action/result` 过滤）。
 
 ### TODO（全量，按优先级）
 - [x] P0-01 鉴权闭环：登录注入 `homeIds`，所有 `homes/:homeId/*` 路由统一家庭权限校验。
@@ -43,8 +49,8 @@
 - [x] P1-04 固件抽象化：设备侧建立传感器/触发器基类与派生实现，替换单文件 demo 结构。
 - [x] P1-05 家庭隔离强化：LLM、自动化、命令查询接口全面按 home 维度过滤和审计。
 
-- [ ] P2-02 生产安全收敛：`cors` 白名单、强 JWT secret、MQTT ACL/TLS 策略。
-- [ ] P2-03 运维能力：Prometheus 指标规范化、审计日志完善、故障告警阈值配置。
+- [x] P2-02 生产安全收敛：`cors` 白名单、强 JWT secret、MQTT ACL/TLS 策略。
+- [x] P2-03 运维能力（无 Prometheus 依赖）：内置指标接口规范化、审计日志完善、故障告警阈值配置。
 - [ ] P2-04 设备可靠性：OTA、离线缓冲、本地队列与重连策略增强。
 - [ ] P2-05 全智能模式总项（Goal-driven + Human-in-the-loop）：在家庭级别支持“模式、目标、策略、动作建议/执行”完整闭环。
 - [ ] P2-05a 领域模型：新增 `SmartModeProfile`（mode/goals/skills/policy）、`DecisionRecord`（trigger/reasoningSummary/actions/result）及版本化配置。
@@ -72,4 +78,5 @@
 - 自动化执行优先确定性 JSON 链路；LLM 只做规则生成和后台辅助判定，不替代确定性执行。
 - 全智能模式默认灰度发布：先“建议优先（human-in-the-loop）”，再逐步放开低风险动作自动执行。
 - 全智能模式默认采用双通道：安全关键场景必须先过确定性规则，LLM 负责多目标优化与解释，不直接绕过护栏。
+- 运维与观测默认采用应用内指标与审计接口，不额外引入 Prometheus 作为必选依赖。
 - 以现有技术栈不变为前提（Bun/Express/TypeORM/React/AI-SDK），不引入新框架重构。

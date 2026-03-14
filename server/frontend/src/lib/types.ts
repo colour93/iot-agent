@@ -149,6 +149,25 @@ export type MqttMetrics = {
   lastError?: string | null;
 };
 
+export type MetricAlert = {
+  id: string;
+  severity: 'info' | 'warn' | 'critical';
+  metric: string;
+  value: number | boolean;
+  threshold: number | boolean;
+  message: string;
+};
+
+export type AuditLogEntry = {
+  id: string;
+  action: string;
+  target: string | null;
+  meta: Record<string, unknown>;
+  userId: string | null;
+  userEmail: string | null;
+  createdAt: string;
+};
+
 export type CommandRecord = {
   id: string;
   cmdId: string;

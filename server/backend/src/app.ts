@@ -12,6 +12,24 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { startAutomationScheduler } from './services/automationScheduler.js';
 import { refreshAllHomeExternalData } from './services/externalDataService.js';
 
+function resolveCorsOrigin(origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) {
+  const allowedOrigins = config.cors?.origins ?? [];
+  if (allowedOrigins.includes('*')) {
+    callback(null, true);
+    return;
+  }
+  if (!origin) {
+    // Non-browser or same-origin request
+    callback(null, true);
+    return;
+  }
+  if (allowedOrigins.includes(origin)) {
+    callback(null, true);
+    return;
+  }
+  callback(null, false);
+}
+
 async function bootstrap() {
   const dataSource = await initDataSource();
   await initRedis();
@@ -20,7 +38,7 @@ async function bootstrap() {
   const app = express();
   app.use(
     cors({
-      origin: config.cors?.origins ?? '*',
+      origin: resolveCorsOrigin,
     }),
   );
   app.use(express.json());

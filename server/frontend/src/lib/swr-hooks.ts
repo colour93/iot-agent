@@ -1,7 +1,18 @@
 import useSWR from 'swr';
 import { api } from './api';
 import { mockAutomations, mockDevices, mockHomes, mockRooms } from './mocks';
-import type { Automation, CommandRecord, Device, Home, HomeStructure, MetricsSummary, MqttMetrics, Room } from './types';
+import type {
+  AuditLogEntry,
+  Automation,
+  CommandRecord,
+  Device,
+  Home,
+  HomeStructure,
+  MetricAlert,
+  MetricsSummary,
+  MqttMetrics,
+  Room,
+} from './types';
 
 function hasAuthSession() {
   if (typeof window === 'undefined') return false;
@@ -200,6 +211,72 @@ export function useMetricsSummary() {
   );
 }
 
+export function useHomeMetricsSummary(homeId?: string) {
+  const fallback: MetricsSummary = { onlineDevices: 0, totalCommands: 0 };
+  const key = homeId ? `/api/homes/${homeId}/metrics/summary` : null;
+  return useSWR<MetricsSummary>(
+    key,
+    async () => {
+      if (!homeId) return fallback;
+      try {
+        return await api.getHomeMetricsSummary(homeId);
+      } catch (err) {
+        console.warn('fetch home metrics summary failed, using fallback', err);
+        return fallback;
+      }
+    },
+    {
+      fallbackData: fallback,
+      revalidateOnFocus: false,
+      refreshInterval: 5000,
+    },
+  );
+}
+
+export function useMetricAlerts() {
+  const fallback: MetricAlert[] = [];
+  return useSWR<MetricAlert[]>(
+    '/api/metrics/alerts',
+    async () => {
+      try {
+        const result = await api.getMetricAlerts();
+        return result.alerts ?? [];
+      } catch (err) {
+        console.warn('fetch metric alerts failed, using fallback', err);
+        return fallback;
+      }
+    },
+    {
+      fallbackData: fallback,
+      revalidateOnFocus: false,
+      refreshInterval: 5000,
+    },
+  );
+}
+
+export function useHomeMetricAlerts(homeId?: string) {
+  const fallback: MetricAlert[] = [];
+  const key = homeId ? `/api/homes/${homeId}/metrics/alerts` : null;
+  return useSWR<MetricAlert[]>(
+    key,
+    async () => {
+      if (!homeId) return fallback;
+      try {
+        const result = await api.getHomeMetricAlerts(homeId);
+        return result.alerts ?? [];
+      } catch (err) {
+        console.warn('fetch home metric alerts failed, using fallback', err);
+        return fallback;
+      }
+    },
+    {
+      fallbackData: fallback,
+      revalidateOnFocus: false,
+      refreshInterval: 5000,
+    },
+  );
+}
+
 export function useMqttMetrics() {
   const fallback: MqttMetrics = { connected: false, lastError: null };
   return useSWR<MqttMetrics>(
@@ -209,6 +286,29 @@ export function useMqttMetrics() {
         return await api.getMqttMetrics();
       } catch (err) {
         console.warn('fetch mqtt metrics failed, using fallback', err);
+        return fallback;
+      }
+    },
+    {
+      fallbackData: fallback,
+      revalidateOnFocus: false,
+      refreshInterval: 5000,
+    },
+  );
+}
+
+export function useAuditLogs(homeId?: string, limit = 20) {
+  const fallback: AuditLogEntry[] = [];
+  const key = homeId ? `/api/homes/${homeId}/audit-logs?limit=${limit}` : null;
+  return useSWR<AuditLogEntry[]>(
+    key,
+    async () => {
+      if (!homeId) return fallback;
+      try {
+        const result = await api.listHomeAuditLogs(homeId, { limit });
+        return result.logs ?? [];
+      } catch (err) {
+        console.warn('fetch audit logs failed, using fallback', err);
         return fallback;
       }
     },

@@ -1,4 +1,5 @@
 import type {
+  AuditLogEntry,
   AuthResponse,
   Automation,
   AutomationDefinition,
@@ -7,6 +8,7 @@ import type {
   DeviceAttrsSnapshot,
   Home,
   HomeStructure,
+  MetricAlert,
   MetricsSummary,
   MqttMetrics,
   Room,
@@ -287,7 +289,30 @@ export const api = {
     ),
 
   getMetricsSummary: (token?: string) => fetchJson<MetricsSummary>('/api/metrics/summary', undefined, token),
+  getHomeMetricsSummary: (homeId: string, token?: string) =>
+    fetchJson<MetricsSummary>(`/api/homes/${homeId}/metrics/summary`, undefined, token),
+  getMetricAlerts: (token?: string) =>
+    fetchJson<{ alerts: MetricAlert[]; generatedAt: string }>('/api/metrics/alerts', undefined, token),
+  getHomeMetricAlerts: (homeId: string, token?: string) =>
+    fetchJson<{ alerts: MetricAlert[]; generatedAt: string }>(
+      `/api/homes/${homeId}/metrics/alerts`,
+      undefined,
+      token,
+    ),
   getMqttMetrics: (token?: string) => fetchJson<MqttMetrics>('/api/metrics/mqtt', undefined, token),
+  listHomeAuditLogs: (
+    homeId: string,
+    query?: { limit?: number; action?: string; result?: 'allow' | 'deny' | 'success' | 'error' },
+    token?: string,
+  ) => {
+    const params = new URLSearchParams();
+    if (typeof query?.limit === 'number') params.set('limit', String(query.limit));
+    if (query?.action) params.set('action', query.action);
+    if (query?.result) params.set('result', query.result);
+    const suffix = params.toString();
+    const url = `/api/homes/${homeId}/audit-logs${suffix ? `?${suffix}` : ''}`;
+    return fetchJson<{ logs: AuditLogEntry[]; limit: number }>(url, undefined, token);
+  },
 
   callFrontModel: (homeId: string, messages: Array<{ role: string; content: string }>, token?: string) =>
     fetchJson<{ text: string }>(

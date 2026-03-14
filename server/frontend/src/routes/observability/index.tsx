@@ -1,7 +1,17 @@
 import { createRoute } from '@tanstack/react-router';
 import { Route as RootRoute } from '../__root';
 import { useAppStore } from '../../lib/store';
-import { useAutomations, useCommands, useDevices, useMetricsSummary, useMqttMetrics } from '../../lib/swr-hooks';
+import {
+  useAuditLogs,
+  useAutomations,
+  useCommands,
+  useDevices,
+  useHomeMetricAlerts,
+  useHomeMetricsSummary,
+  useMetricAlerts,
+  useMetricsSummary,
+  useMqttMetrics,
+} from '../../lib/swr-hooks';
 import { Card, CardContent, CardHeader } from '../../components/ui/card';
 import { Table, TBody, TD, TH, THead, TR } from '../../components/ui/table';
 import { Alert } from '../../components/ui/alert';
@@ -12,8 +22,14 @@ const ObservabilityPage = () => {
   const { data: devices = [] } = useDevices(selectedHome);
   const { data: automations = [] } = useAutomations(selectedHome);
   const { data: commands = [] } = useCommands(selectedHome, 15);
-  const { data: summary } = useMetricsSummary();
+  const { data: globalSummary } = useMetricsSummary();
+  const { data: homeSummary } = useHomeMetricsSummary(selectedHome);
+  const { data: globalAlerts = [] } = useMetricAlerts();
+  const { data: homeAlerts = [] } = useHomeMetricAlerts(selectedHome);
+  const { data: auditLogs = [] } = useAuditLogs(selectedHome, 15);
   const { data: mqtt } = useMqttMetrics();
+  const summary = selectedHome ? homeSummary : globalSummary;
+  const alerts = selectedHome ? homeAlerts : globalAlerts;
 
   const online = devices.filter((item) => item.status === 'online').length;
   const enabledAutomations = automations.filter((item) => item.enabled).length;
@@ -38,6 +54,11 @@ const ObservabilityPage = () => {
         </div>
       </section>
       {!selectedHome && <Alert>当前未选择家庭，以下指标为全局与回退数据。</Alert>}
+      {alerts.length > 0 && (
+        <Alert>
+          当前存在 {alerts.length} 条告警：{alerts.map((item) => item.message).join('；')}
+        </Alert>
+      )}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard title="设备在线" value={`${online}/${devices.length || 0}`} desc="当前家庭在线比" />
         <MetricCard title="自动化启用" value={`${enabledAutomations}/${automations.length || 0}`} desc="确定性规则状态" />
@@ -148,6 +169,44 @@ const ObservabilityPage = () => {
                       <TD className="text-xs text-muted-foreground">
                         {command.createdAt ? new Date(command.createdAt).toLocaleString() : '-'}
                       </TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="surface-panel">
+        <CardHeader className="text-sm font-semibold">审计日志（当前家庭）</CardHeader>
+        <CardContent>
+          {!selectedHome ? (
+            <div className="text-xs text-muted-foreground">请选择家庭后查看审计日志。</div>
+          ) : auditLogs.length === 0 ? (
+            <div className="text-xs text-muted-foreground">暂无审计日志。</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table className="min-w-[760px]">
+                <THead>
+                  <TR>
+                    <TH>时间</TH>
+                    <TH>动作</TH>
+                    <TH>结果</TH>
+                    <TH>用户</TH>
+                    <TH>目标</TH>
+                  </TR>
+                </THead>
+                <TBody>
+                  {auditLogs.map((log) => (
+                    <TR key={log.id}>
+                      <TD className="text-xs text-muted-foreground">
+                        {new Date(log.createdAt).toLocaleString()}
+                      </TD>
+                      <TD>{log.action}</TD>
+                      <TD>{String(log.meta?.result ?? '-')}</TD>
+                      <TD>{log.userEmail || log.userId || '-'}</TD>
+                      <TD>{log.target || '-'}</TD>
                     </TR>
                   ))}
                 </TBody>

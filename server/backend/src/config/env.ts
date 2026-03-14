@@ -4,6 +4,7 @@ import yaml from 'yaml';
 import { z } from 'zod';
 
 const supportedLogLevels = ['fatal', 'error', 'warn', 'info', 'debug', 'trace'] as const;
+const isProduction = process.env.NODE_ENV === 'production';
 
 function isUrlWithProtocol(value: string, protocols: string[]) {
   try {
@@ -48,11 +49,32 @@ const httpUrlSchema = z
 
 const corsOriginsSchema = z
   .array(z.string().trim().min(1))
-  .default(['*'])
+  .default(['http://localhost:5173'])
   .transform((origins) => {
     const deduped = [...new Set(origins.map((origin) => origin.trim()).filter(Boolean))];
-    return deduped.length > 0 ? deduped : ['*'];
+    return deduped.length > 0 ? deduped : ['http://localhost:5173'];
   });
+
+const optionalPathSchema = z.string().trim().min(1).optional();
+
+const mqttTlsSchema = z
+  .object({
+    enabled: z.boolean().default(false),
+    rejectUnauthorized: z.boolean().default(true),
+    caPath: optionalPathSchema,
+    certPath: optionalPathSchema,
+    keyPath: optionalPathSchema,
+  })
+  .strict();
+
+const alertThresholdSchema = z
+  .object({
+    commandSuccessRateMin: z.number().min(0).max(1).default(0.85),
+    automationFailureRateMax: z.number().min(0).max(1).default(0.25),
+    llmFailureRateMax: z.number().min(0).max(1).default(0.2),
+    requireMqttConnected: z.boolean().default(true),
+  })
+  .strict();
 
 const appConfigSchema = z
   .object({
@@ -62,6 +84,7 @@ const appConfigSchema = z
         url: mqttUrlSchema,
         user: z.string(),
         pass: z.string(),
+        tls: mqttTlsSchema,
       })
       .strict(),
     postgres: z
@@ -76,7 +99,7 @@ const appConfigSchema = z
       .strict(),
     jwt: z
       .object({
-        secret: z.string().trim().min(1),
+        secret: z.string().trim().min(16),
       })
       .strict(),
     auth: z
@@ -98,6 +121,11 @@ const appConfigSchema = z
         origins: corsOriginsSchema,
       })
       .strict(),
+    observability: z
+      .object({
+        alertThresholds: alertThresholdSchema,
+      })
+      .strict(),
   })
   .strict();
 
@@ -112,6 +140,7 @@ const partialConfigSchema = z
     logLevel: appConfigSchema.shape.logLevel.optional(),
     llm: appConfigSchema.shape.llm.partial().optional(),
     cors: appConfigSchema.shape.cors.partial().optional(),
+    observability: appConfigSchema.shape.observability.partial().optional(),
   })
   .strict();
 
@@ -120,15 +149,42 @@ type PartialAppConfig = z.infer<typeof partialConfigSchema>;
 
 const DEFAULT_CONFIG: AppConfig = {
   port: 4000,
-  mqtt: { url: 'mqtt://localhost:1883', user: 'dev', pass: 'dev' },
+  mqtt: {
+    url: 'mqtt://localhost:1883',
+    user: 'dev',
+    pass: 'dev',
+    tls: {
+      enabled: false,
+      rejectUnauthorized: true,
+      caPath: undefined,
+      certPath: undefined,
+      keyPath: undefined,
+    },
+  },
   postgres: { url: 'postgres://postgres:postgres@localhost:5432/iot' },
   redis: { url: 'redis://localhost:6379' },
-  jwt: { secret: 'dev-secret' },
+  jwt: { secret: 'dev-secret-change-me-please-2026' },
   auth: { oauthProviders: [] },
   logLevel: 'info',
   llm: { provider: 'openai', apiKey: '', baseUrl: undefined, model: 'gpt-4o-mini' },
-  cors: { origins: ['*'] },
+  cors: { origins: ['http://localhost:5173'] },
+  observability: {
+    alertThresholds: {
+      commandSuccessRateMin: 0.85,
+      automationFailureRateMax: 0.25,
+      llmFailureRateMax: 0.2,
+      requireMqttConnected: true,
+    },
+  },
 };
+
+function isMqttsUrl(value: string) {
+  try {
+    return new URL(value).protocol === 'mqtts:';
+  } catch {
+    return false;
+  }
+}
 
 function formatConfigError(configPath: string, issues: z.ZodIssue[]) {
   const details = issues
@@ -161,15 +217,38 @@ function parseConfigFile(configPath: string): PartialAppConfig {
 }
 
 function emitConfigWarnings(config: AppConfig) {
-  if (config.jwt.secret.length < 16) {
-    console.warn('[config] jwt.secret is shorter than 16 chars. Use a stronger secret in production.');
+  if (config.jwt.secret.length < 32) {
+    console.warn('[config] jwt.secret is shorter than 32 chars. Use a stronger secret in production.');
   }
   if (config.cors.origins.includes('*')) {
     console.warn('[config] cors.origins contains "*". Limit allowed origins in production.');
   }
+  if (!isMqttsUrl(config.mqtt.url)) {
+    console.warn('[config] mqtt.url uses mqtt://. Prefer mqtts:// in production.');
+  }
+  if (config.mqtt.user === 'dev' || config.mqtt.pass === 'dev') {
+    console.warn('[config] mqtt user/pass still use dev credentials.');
+  }
   const llmProvider = config.llm.provider.trim().toLowerCase();
   if (config.llm.apiKey && llmProvider === 'gateway' && !config.llm.model.includes('/')) {
     console.warn('[config] llm.model is missing provider prefix. Example: "openai/gpt-4o-mini".');
+  }
+}
+
+function enforceProductionSecurity(config: AppConfig) {
+  if (!isProduction) return;
+
+  if (config.jwt.secret.length < 32) {
+    throw new Error('Invalid production config: jwt.secret must be at least 32 chars.');
+  }
+  if (config.cors.origins.includes('*')) {
+    throw new Error('Invalid production config: cors.origins cannot contain "*".');
+  }
+  if (!isMqttsUrl(config.mqtt.url)) {
+    throw new Error('Invalid production config: mqtt.url must use mqtts://');
+  }
+  if (!config.mqtt.tls.rejectUnauthorized) {
+    throw new Error('Invalid production config: mqtt.tls.rejectUnauthorized must be true.');
   }
 }
 
@@ -183,6 +262,14 @@ function loadConfig(): AppConfig {
       url: partial.mqtt?.url ?? DEFAULT_CONFIG.mqtt.url,
       user: partial.mqtt?.user ?? DEFAULT_CONFIG.mqtt.user,
       pass: partial.mqtt?.pass ?? DEFAULT_CONFIG.mqtt.pass,
+      tls: {
+        enabled: partial.mqtt?.tls?.enabled ?? DEFAULT_CONFIG.mqtt.tls.enabled,
+        rejectUnauthorized:
+          partial.mqtt?.tls?.rejectUnauthorized ?? DEFAULT_CONFIG.mqtt.tls.rejectUnauthorized,
+        caPath: partial.mqtt?.tls?.caPath ?? DEFAULT_CONFIG.mqtt.tls.caPath,
+        certPath: partial.mqtt?.tls?.certPath ?? DEFAULT_CONFIG.mqtt.tls.certPath,
+        keyPath: partial.mqtt?.tls?.keyPath ?? DEFAULT_CONFIG.mqtt.tls.keyPath,
+      },
     },
     postgres: {
       url: partial.postgres?.url ?? DEFAULT_CONFIG.postgres.url,
@@ -206,6 +293,22 @@ function loadConfig(): AppConfig {
     cors: {
       origins: partial.cors?.origins ?? DEFAULT_CONFIG.cors.origins,
     },
+    observability: {
+      alertThresholds: {
+        commandSuccessRateMin:
+          partial.observability?.alertThresholds?.commandSuccessRateMin ??
+          DEFAULT_CONFIG.observability.alertThresholds.commandSuccessRateMin,
+        automationFailureRateMax:
+          partial.observability?.alertThresholds?.automationFailureRateMax ??
+          DEFAULT_CONFIG.observability.alertThresholds.automationFailureRateMax,
+        llmFailureRateMax:
+          partial.observability?.alertThresholds?.llmFailureRateMax ??
+          DEFAULT_CONFIG.observability.alertThresholds.llmFailureRateMax,
+        requireMqttConnected:
+          partial.observability?.alertThresholds?.requireMqttConnected ??
+          DEFAULT_CONFIG.observability.alertThresholds.requireMqttConnected,
+      },
+    },
   };
 
   const validation = appConfigSchema.safeParse(merged);
@@ -214,6 +317,7 @@ function loadConfig(): AppConfig {
   }
 
   emitConfigWarnings(validation.data);
+  enforceProductionSecurity(validation.data);
   return validation.data;
 }
 

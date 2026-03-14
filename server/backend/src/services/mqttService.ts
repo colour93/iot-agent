@@ -1,4 +1,5 @@
 import mqtt, { MqttClient } from 'mqtt';
+import fs from 'fs';
 import { DataSource } from 'typeorm';
 import { config } from '../config/env.js';
 import { logger } from '../logger.js';
@@ -51,12 +52,38 @@ interface LwtPayload {
   ts: number;
 }
 
+function maybeReadFile(filePath?: string) {
+  if (!filePath) return undefined;
+  return fs.readFileSync(filePath);
+}
+
 export function startMqttService(dataSource: DataSource) {
-  const client = mqtt.connect(config.mqtt.url, {
+  const useTls = config.mqtt.tls.enabled || config.mqtt.url.startsWith('mqtts://');
+  const connectOptions: mqtt.IClientOptions = {
     username: config.mqtt.user,
     password: config.mqtt.pass,
     clean: true,
-  });
+  };
+  if (useTls) {
+    connectOptions.rejectUnauthorized = config.mqtt.tls.rejectUnauthorized;
+    const ca = maybeReadFile(config.mqtt.tls.caPath);
+    const cert = maybeReadFile(config.mqtt.tls.certPath);
+    const key = maybeReadFile(config.mqtt.tls.keyPath);
+    if (ca) connectOptions.ca = ca;
+    if (cert) connectOptions.cert = cert;
+    if (key) connectOptions.key = key;
+    logger.info(
+      {
+        rejectUnauthorized: connectOptions.rejectUnauthorized,
+        hasCa: Boolean(ca),
+        hasCert: Boolean(cert),
+        hasKey: Boolean(key),
+      },
+      'MQTT TLS config loaded',
+    );
+  }
+
+  const client = mqtt.connect(config.mqtt.url, connectOptions);
 
   client.on('connect', () => {
     logger.info('MQTT connected');

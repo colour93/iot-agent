@@ -3,12 +3,18 @@ mqtt:
   url: mqtt://localhost:1883
   user: dev
   pass: dev
+  tls:
+    enabled: false
+    rejectUnauthorized: true
+    caPath: ""    # 可选，mqtts CA 证书路径
+    certPath: ""  # 可选，客户端证书路径
+    keyPath: ""   # 可选，客户端私钥路径
 postgres:
   url: postgres://postgres:postgres@localhost:5432/iot
 redis:
   url: redis://localhost:6379
 jwt:
-  secret: dev-secret
+  secret: dev-secret-change-me-please-2026
 llm:
   provider: openai # openai|anthropic|google|deepseek|qwen
   apiKey: ""
@@ -16,5 +22,11 @@ llm:
   model: gpt-4o-mini
 cors:
   origins:
-    - "*"
+    - "http://localhost:5173"
 
+observability:
+  alertThresholds:
+    commandSuccessRateMin: 0.85
+    automationFailureRateMax: 0.25
+    llmFailureRateMax: 0.2
+    requireMqttConnected: true
