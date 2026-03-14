@@ -5,6 +5,7 @@ import { Room } from './room.js';
 import { Automation } from './automation.js';
 import { LLMSession } from './llmSession.js';
 import { LLMInvocation } from './llmInvocation.js';
+import { ChatSession } from './chatSession.js';
 
 @Entity('homes')
 export class Home extends BaseModel {
@@ -31,5 +32,8 @@ export class Home extends BaseModel {
 
   @OneToMany(() => LLMInvocation, (i) => i.home)
   declare llmInvocations: LLMInvocation[];
+
+  @OneToMany(() => ChatSession, (session) => session.home)
+  declare chatSessions: ChatSession[];
 }
 

@@ -9,11 +9,28 @@ import type {
   Room,
 } from './types';
 import { toast } from 'sonner';
+import type { UIMessage } from 'ai';
 
 type AutomationApiItem = Omit<Automation, 'homeId'> & {
   home?: {
     id?: string;
   };
+};
+
+export type ChatSessionSummary = {
+  id: string;
+  homeId: string;
+  title: string;
+  latestPreview: string | null;
+  messageCount: number;
+  lastMessageAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ChatSessionDetail = {
+  session: ChatSessionSummary;
+  messages: UIMessage[];
 };
 
 function buildHeaders(token?: string, extra?: Record<string, string>) {
@@ -251,6 +268,66 @@ export const api = {
       {
         method: 'POST',
         body: JSON.stringify({ messages }),
+      },
+      token,
+    ),
+
+  listChatSessions: async (homeId: string, token?: string) => {
+    const result = await fetchJson<{ sessions: ChatSessionSummary[] }>(
+      `/api/homes/${homeId}/llm/chat/sessions`,
+      undefined,
+      token,
+    );
+    return result.sessions;
+  },
+
+  createChatSession: (homeId: string, data?: { title?: string }, token?: string) =>
+    fetchJson<ChatSessionSummary>(
+      `/api/homes/${homeId}/llm/chat/sessions`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data ?? {}),
+      },
+      token,
+    ),
+
+  getChatSession: (homeId: string, sessionId: string, token?: string) =>
+    fetchJson<ChatSessionDetail>(
+      `/api/homes/${homeId}/llm/chat/sessions/${sessionId}`,
+      undefined,
+      token,
+    ),
+
+  updateChatSessionMessages: (
+    homeId: string,
+    sessionId: string,
+    messages: UIMessage[],
+    token?: string,
+  ) =>
+    fetchJson<ChatSessionDetail>(
+      `/api/homes/${homeId}/llm/chat/sessions/${sessionId}/messages`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ messages }),
+      },
+      token,
+    ),
+
+  renameChatSession: (homeId: string, sessionId: string, title: string, token?: string) =>
+    fetchJson<ChatSessionSummary>(
+      `/api/homes/${homeId}/llm/chat/sessions/${sessionId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ title }),
+      },
+      token,
+    ),
+
+  deleteChatSession: (homeId: string, sessionId: string, token?: string) =>
+    fetchJson<{ status: string; sessionId: string }>(
+      `/api/homes/${homeId}/llm/chat/sessions/${sessionId}`,
+      {
+        method: 'DELETE',
       },
       token,
     ),

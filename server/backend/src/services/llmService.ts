@@ -3,6 +3,7 @@ import {
   ToolLoopAgent,
   createGateway,
   pipeAgentUIStreamToResponse,
+  safeValidateUIMessages,
   stepCountIs,
   tool,
   type LanguageModel,
@@ -26,6 +27,7 @@ import {
 import { logger } from '../logger.js';
 import { redis } from './redisClient.js';
 import { sendCommand } from './mqttService.js';
+import { ensureChatSession, replaceChatSessionMessages } from './chatHistoryService.js';
 
 type Role = 'front' | 'back';
 type SupportedProvider = 'openai' | 'gateway';
@@ -829,9 +831,38 @@ export async function streamChatWithTools(
   homeId: string,
   uiMessages: unknown[],
   response: Response,
+  options: { sessionId?: string } = {},
 ) {
   const role: Role = 'front';
   const session = await getOrCreateSession(dataSource, homeId, role);
+  const chatSession = await ensureChatSession(dataSource, {
+    homeId,
+    sessionId: options.sessionId,
+  });
+  if (!chatSession) {
+    response.status(403).json({ code: 403, msg: 'forbidden_session' });
+    return;
+  }
+
+  const validatedMessagesResult = await safeValidateUIMessages<UIMessage>({
+    messages: uiMessages,
+  });
+  if (!validatedMessagesResult.success) {
+    response.status(400).json({ code: 400, msg: 'messages_invalid' });
+    return;
+  }
+  const validatedMessages = validatedMessagesResult.data;
+
+  const persistedBeforeStream = await replaceChatSessionMessages(dataSource, {
+    homeId,
+    sessionId: chatSession.id,
+    messages: validatedMessages,
+  });
+  if (!persistedBeforeStream) {
+    response.status(404).json({ code: 404, msg: 'session_not_found' });
+    return;
+  }
+
   const allowed = await enforceRateLimit(homeId, role);
   if (!allowed) {
     response.status(429).json({ code: 429, msg: 'rate_limited' });
@@ -859,7 +890,9 @@ export async function streamChatWithTools(
   await pipeAgentUIStreamToResponse({
     response,
     agent,
-    uiMessages,
+    uiMessages: validatedMessages,
+    originalMessages: validatedMessages as never,
+    generateMessageId: () => crypto.randomUUID(),
     onStepFinish: (stepResult) => {
       tokensIn += stepResult.usage.inputTokens ?? 0;
       tokensOut += stepResult.usage.outputTokens ?? 0;
@@ -868,6 +901,19 @@ export async function streamChatWithTools(
       }
     },
     onFinish: async ({ responseMessage, finishReason, isAborted, messages }) => {
+      try {
+        await replaceChatSessionMessages(dataSource, {
+          homeId,
+          sessionId: chatSession.id,
+          messages,
+        });
+      } catch (err) {
+        logger.error(
+          { err, homeId, sessionId: chatSession.id },
+          'persist streamed chat messages failed',
+        );
+      }
+
       const text = extractAssistantTextFromUIMessage(responseMessage) || (isAborted ? 'response_aborted' : '');
       await persistInvocation(dataSource, {
         session,
@@ -877,7 +923,8 @@ export async function streamChatWithTools(
           mode: 'stream',
           provider: resolvedModel.providerName,
           model: resolvedModel.modelName,
-          uiMessagesCount: Array.isArray(uiMessages) ? uiMessages.length : 0,
+          sessionId: chatSession.id,
+          uiMessagesCount: validatedMessages.length,
           totalMessages: messages.length,
         },
         output: {

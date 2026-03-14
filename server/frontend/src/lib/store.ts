@@ -8,6 +8,7 @@ type State = {
   selectedHome?: string;
   selectedRoom?: string;
   chatLog: { role: 'user' | 'assistant'; text: string }[];
+  chatSidebarCollapsed: boolean;
   token?: string;
   user?: { id: string; email: string; role: string };
   hydrated: boolean;
@@ -24,12 +25,15 @@ type Actions = {
   ) => Promise<void>;
   sendChat: (prompt: string) => Promise<void>;
   setAuth: (token: string, user: { id: string; email: string; role: string }) => void;
+  setChatSidebarCollapsed: (collapsed: boolean) => void;
+  toggleChatSidebarCollapsed: () => void;
   logout: () => void;
   hydrate: () => void;
 };
 
 export const useAppStore = create<State & Actions>((set, get) => ({
   chatLog: [],
+  chatSidebarCollapsed: false,
   hydrated: false,
 
   hydrate: () => {
@@ -50,7 +54,14 @@ export const useAppStore = create<State & Actions>((set, get) => ({
   logout: () => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('authUser');
-    set({ token: undefined, user: undefined, selectedHome: undefined, selectedRoom: undefined, chatLog: [] });
+    set({
+      token: undefined,
+      user: undefined,
+      selectedHome: undefined,
+      selectedRoom: undefined,
+      chatLog: [],
+      chatSidebarCollapsed: false,
+    });
   },
 
   selectHome: (homeId) => {
@@ -96,5 +107,13 @@ export const useAppStore = create<State & Actions>((set, get) => ({
       set((s) => ({ chatLog: [...s.chatLog, { role: 'assistant', text: '请求失败，请稍后重试。' }] }));
       throw err;
     }
+  },
+
+  setChatSidebarCollapsed: (collapsed) => {
+    set({ chatSidebarCollapsed: collapsed });
+  },
+
+  toggleChatSidebarCollapsed: () => {
+    set((state) => ({ chatSidebarCollapsed: !state.chatSidebarCollapsed }));
   },
 }));

@@ -1,9 +1,10 @@
 import { createRootRoute, Outlet, Link, useNavigate, redirect, useLocation } from '@tanstack/react-router';
 import { useAppStore } from '../../lib/store';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '../../components/ui/button';
 import { useHomeStructure, useHomes } from '../../lib/swr-hooks';
 import { cn } from '../../lib/utils';
+import { motion } from 'motion/react';
 
 const navItems = [
   { to: '/', label: '总览' },
@@ -27,10 +28,69 @@ const Shell = () => {
   const currentHome = homes.find((item) => item.id === selectedHome) || structure?.home;
   const currentRoom = structure?.rooms.find((item) => item.id === selectedRoom);
   const isChatRoute = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
+  const [autoHideHeadbar, setAutoHideHeadbar] = useState(false);
+  const [headbarVisible, setHeadbarVisible] = useState(true);
+  const hideTimerRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     hydrate();
   }, [hydrate]);
+
+  const clearHideTimer = useCallback(() => {
+    if (hideTimerRef.current) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = undefined;
+    }
+  }, []);
+
+  const showHeadbar = useCallback(() => {
+    clearHideTimer();
+    setHeadbarVisible(true);
+  }, [clearHideTimer]);
+
+  const scheduleHideHeadbar = useCallback(() => {
+    if (!isChatRoute || !autoHideHeadbar) return;
+    clearHideTimer();
+    hideTimerRef.current = window.setTimeout(() => {
+      setHeadbarVisible(false);
+    }, 220);
+  }, [autoHideHeadbar, clearHideTimer, isChatRoute]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(hover: hover) and (pointer: fine)');
+    const syncMode = () => {
+      const canHover = mediaQuery.matches;
+      setAutoHideHeadbar(canHover);
+      setHeadbarVisible(!canHover);
+    };
+
+    syncMode();
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', syncMode);
+      return () => {
+        mediaQuery.removeEventListener('change', syncMode);
+      };
+    }
+
+    mediaQuery.addListener(syncMode);
+    return () => {
+      mediaQuery.removeListener(syncMode);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearHideTimer();
+    };
+  }, [clearHideTimer]);
+
+  const enableHeadbarAutoHide = isChatRoute && autoHideHeadbar;
+
+  useEffect(() => {
+    if (enableHeadbarAutoHide) return;
+    clearHideTimer();
+    setHeadbarVisible(true);
+  }, [clearHideTimer, enableHeadbarAutoHide]);
 
   if (!hydrated) {
     return <div className="p-6 text-sm text-muted-foreground">正在同步会话状态...</div>;
@@ -51,9 +111,37 @@ const Shell = () => {
         isChatRoute ? 'h-dvh overflow-hidden' : 'min-h-screen pb-8',
       )}
     >
-      <header className="sticky top-0 z-40 px-4 pt-4 sm:px-6 sm:pt-5 lg:px-8">
+      {enableHeadbarAutoHide ? (
+        <div
+          className="fixed inset-x-0 top-0 z-30 h-8"
+          onMouseEnter={showHeadbar}
+          onMouseLeave={scheduleHideHeadbar}
+          aria-hidden
+        />
+      ) : null}
+      <motion.header
+        className="pointer-events-none fixed inset-x-0 top-0 z-40 px-4 pt-4 sm:px-6 sm:pt-5 lg:px-8"
+        onMouseEnter={showHeadbar}
+        onMouseLeave={scheduleHideHeadbar}
+        onFocusCapture={showHeadbar}
+        initial={false}
+        animate={
+          enableHeadbarAutoHide && !headbarVisible
+            ? { y: '-130%', opacity: 0 }
+            : { y: '0%', opacity: 1 }
+        }
+        transition={{
+          duration: 0.32,
+          ease: [0.22, 1, 0.36, 1],
+        }}
+      >
         <div className="mx-auto max-w-[1240px]">
-          <div className="relative overflow-hidden rounded-[1.3rem] border border-border/80 bg-background/90 px-4 py-4 shadow-[0_18px_34px_-28px_oklch(0.28_0.02_240_/_18%)] backdrop-blur-xl sm:px-5">
+          <div
+            className={cn(
+              'relative overflow-hidden rounded-[1.3rem] border border-border/80 bg-background/90 px-4 py-4 shadow-[0_18px_34px_-28px_oklch(0.28_0.02_240_/_18%)] backdrop-blur-xl sm:px-5',
+              enableHeadbarAutoHide && !headbarVisible ? 'pointer-events-none' : 'pointer-events-auto',
+            )}
+          >
             <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-[linear-gradient(90deg,transparent,oklch(0.7_0.05_218_/_40%),transparent)]" />
             <div className="relative flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
               <div className="min-w-0 lg:flex-[1.15]">
@@ -105,12 +193,12 @@ const Shell = () => {
             </div>
           </div>
         </div>
-      </header>
+      </motion.header>
       <main
         className={cn(
           isChatRoute
-            ? 'flex h-[calc(100dvh-7.8rem)] px-3 pb-4 pt-4 sm:px-4 lg:px-5'
-            : 'mx-auto max-w-[1240px] px-4 py-6 sm:px-6 lg:px-8',
+            ? 'h-full min-h-0 px-0 pb-0 pt-0'
+            : 'mx-auto max-w-[1240px] px-4 pb-6 pt-[7.2rem] sm:px-6 sm:pt-[7.6rem] lg:px-8',
         )}
       >
         <div className={cn('page-enter', isChatRoute ? 'h-full w-full' : '')}>

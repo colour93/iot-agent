@@ -13,6 +13,8 @@ import { LLMSession } from './llmSession.js';
 import { LLMInvocation } from './llmInvocation.js';
 import { ExternalDataCache } from './externalDataCache.js';
 import { AuditLog } from './auditLog.js';
+import { ChatSession } from './chatSession.js';
+import { ChatMessage } from './chatMessage.js';
 
 export const entities = [
   User,
@@ -28,6 +30,8 @@ export const entities = [
   AutomationRun,
   LLMSession,
   LLMInvocation,
+  ChatSession,
+  ChatMessage,
   ExternalDataCache,
   AuditLog,
 ];
@@ -46,7 +50,8 @@ export {
   AutomationRun,
   LLMSession,
   LLMInvocation,
+  ChatSession,
+  ChatMessage,
   ExternalDataCache,
   AuditLog,
 };
-
