@@ -36,6 +36,5 @@ config.yaml
 consts.h
 
 .vscode
-.agents
 
 test-device/config/devices.local.toml
