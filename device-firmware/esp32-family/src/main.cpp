@@ -24,20 +24,120 @@ TriggerBase *triggers[] = {&ledTrigger};
 constexpr size_t SENSOR_COUNT = sizeof(sensors) / sizeof(sensors[0]);
 constexpr size_t TRIGGER_COUNT = sizeof(triggers) / sizeof(triggers[0]);
 
+struct OutboxMessage
+{
+  String topic;
+  String payload;
+  uint8_t qos;
+  bool retain;
+};
+
+constexpr size_t OUTBOX_CAPACITY = 24;
+constexpr unsigned long RETRY_BACKOFF_MIN_MS = 1000;
+constexpr unsigned long RETRY_BACKOFF_MAX_MS = 30000;
+OutboxMessage outbox[OUTBOX_CAPACITY];
+size_t outboxHead = 0;
+size_t outboxTail = 0;
+size_t outboxCount = 0;
+unsigned long nextWifiRetryMs = 0;
+unsigned long nextMqttRetryMs = 0;
+unsigned long wifiBackoffMs = RETRY_BACKOFF_MIN_MS;
+unsigned long mqttBackoffMs = RETRY_BACKOFF_MIN_MS;
+
 // ====== 工具函数 ======
 String buildTopic(const String &suffix) { return baseTopic + "/" + suffix; }
 
-void connectWifi()
+unsigned long growBackoff(unsigned long current)
 {
+  if (current >= RETRY_BACKOFF_MAX_MS)
+  {
+    return RETRY_BACKOFF_MAX_MS;
+  }
+  unsigned long doubled = current * 2;
+  if (doubled > RETRY_BACKOFF_MAX_MS)
+  {
+    return RETRY_BACKOFF_MAX_MS;
+  }
+  return doubled;
+}
+
+void enqueueOutbox(const String &topic, const String &payload, uint8_t qos, bool retain)
+{
+  if (outboxCount >= OUTBOX_CAPACITY)
+  {
+    logWarn("Outbox full, drop oldest message");
+    outboxHead = (outboxHead + 1) % OUTBOX_CAPACITY;
+    outboxCount--;
+  }
+  outbox[outboxTail] = {topic, payload, qos, retain};
+  outboxTail = (outboxTail + 1) % OUTBOX_CAPACITY;
+  outboxCount++;
+}
+
+void publishOrQueue(const String &topic, const String &payload, uint8_t qos, bool retain)
+{
+  if (mqttClient.connected())
+  {
+    mqttClient.publish(topic.c_str(), qos, retain, payload.c_str());
+    return;
+  }
+  enqueueOutbox(topic, payload, qos, retain);
+}
+
+void flushOutbox(size_t maxBatch = 8)
+{
+  if (!mqttClient.connected() || outboxCount == 0)
+  {
+    return;
+  }
+  size_t sent = 0;
+  while (outboxCount > 0 && sent < maxBatch)
+  {
+    const OutboxMessage &msg = outbox[outboxHead];
+    mqttClient.publish(msg.topic.c_str(), msg.qos, msg.retain, msg.payload.c_str());
+    outboxHead = (outboxHead + 1) % OUTBOX_CAPACITY;
+    outboxCount--;
+    sent++;
+  }
+  if (sent > 0)
+  {
+    logDebug(String("Flushed outbox count=") + sent);
+  }
+}
+
+bool connectWifi(unsigned long now)
+{
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    return true;
+  }
+  if (now < nextWifiRetryMs)
+  {
+    return false;
+  }
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   logInfo("Connecting WiFi");
-  while (WiFi.status() != WL_CONNECTED)
+  const unsigned long started = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - started < 8000)
   {
-    delay(500);
+    delay(250);
     Serial.print(".");
   }
-  logInfo("WiFi connected, IP: " + WiFi.localIP().toString());
+
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    wifiBackoffMs = RETRY_BACKOFF_MIN_MS;
+    nextWifiRetryMs = 0;
+    logInfo("WiFi connected, IP: " + WiFi.localIP().toString());
+    return true;
+  }
+
+  logWarn(String("WiFi connect failed, retry in ") + wifiBackoffMs + "ms");
+  nextWifiRetryMs = now + wifiBackoffMs;
+  wifiBackoffMs = growBackoff(wifiBackoffMs);
+  return false;
 }
 
 void publishRegister()
@@ -60,9 +160,9 @@ void publishRegister()
     triggers[i]->appendCapability(caps);
   }
 
-  char buffer[512];
-  size_t len = serializeJson(doc, buffer);
-  mqttClient.publish(buildTopic("register").c_str(), 1, false, buffer, len);
+  String payload;
+  serializeJson(doc, payload);
+  publishOrQueue(buildTopic("register"), payload, 1, false);
 }
 
 void publishHeartbeat()
@@ -73,9 +173,9 @@ void publishHeartbeat()
   doc["status"] = "online";
   doc["meta"]["rssi"] = WiFi.RSSI();
 
-  char buffer[256];
-  size_t len = serializeJson(doc, buffer);
-  mqttClient.publish(buildTopic("lwt/status").c_str(), 1, false, buffer, len);
+  String payload;
+  serializeJson(doc, payload);
+  publishOrQueue(buildTopic("lwt/status"), payload, 1, false);
 }
 
 void publishTelemetry()
@@ -88,9 +188,9 @@ void publishTelemetry()
     sensors[i]->appendTelemetry(attrs);
   }
 
-  char buffer[256];
-  size_t len = serializeJson(doc, buffer);
-  mqttClient.publish(buildTopic("telemetry").c_str(), 0, false, buffer, len);
+  String payload;
+  serializeJson(doc, payload);
+  publishOrQueue(buildTopic("telemetry"), payload, 0, false);
 }
 
 void handleCommand(const String &topic, const String &payload)
@@ -136,9 +236,9 @@ void handleCommand(const String &topic, const String &payload)
   {
     ack["error"] = status;
   }
-  char buffer[256];
-  size_t len = serializeJson(ack, buffer);
-  mqttClient.publish(buildTopic("command/ack").c_str(), 1, false, buffer, len);
+  String payloadText;
+  serializeJson(ack, payloadText);
+  publishOrQueue(buildTopic("command/ack"), payloadText, 1, false);
 }
 
 void onMessage(char *topic, char *payload, int retain, int qos, bool dup)
@@ -160,44 +260,58 @@ void onMessage(char *topic, char *payload, int retain, int qos, bool dup)
   }
 }
 
-void connectMqtt()
+void configureMqttClient()
 {
   mqttClient.setServer(MQTT_URI);
   mqttClient.setCredentials(MQTT_USER, MQTT_PASS);
   mqttClient.setClientId((String("device/") + DEVICE_ID).c_str());
   mqttClient.setWill(buildTopic("lwt/status").c_str(), 1, true, "{\"status\":\"offline\"}");
   mqttClient.onMessage(onMessage);
+}
 
-  logInfo("Connecting MQTT with URI: " + String(MQTT_URI));
+bool connectMqtt(unsigned long now)
+{
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    return false;
+  }
   if (mqttClient.connected())
   {
-    logInfo("MQTT already connected");
-    return;
+    return true;
   }
+  if (now < nextMqttRetryMs)
+  {
+    return false;
+  }
+
+  configureMqttClient();
+  logInfo("Connecting MQTT with URI: " + String(MQTT_URI));
   mqttClient.disconnect();
-  delay(200);
+  delay(150);
   mqttClient.connect();
 
   uint8_t retry = 0;
-  while (!mqttClient.connected() && retry < 10)
+  while (!mqttClient.connected() && retry < 15)
   {
-    delay(300);
+    delay(200);
     retry++;
   }
   if (mqttClient.connected())
   {
+    mqttBackoffMs = RETRY_BACKOFF_MIN_MS;
+    nextMqttRetryMs = 0;
     logInfo("MQTT connected");
+    mqttClient.subscribe(buildTopic("command").c_str(), 1);
+    mqttClient.subscribe(buildTopic("register/ack").c_str(), 1);
+    mqttClient.subscribe(buildTopic("config").c_str(), 1);
+    publishRegister();
+    flushOutbox();
+    return true;
   }
-  else
-  {
-    logError("MQTT connect failed");
-  }
-
-  mqttClient.subscribe(buildTopic("command").c_str(), 1);
-  mqttClient.subscribe(buildTopic("register/ack").c_str(), 1);
-  mqttClient.subscribe(buildTopic("config").c_str(), 1);
-
-  publishRegister();
+  logWarn(String("MQTT connect failed, retry in ") + mqttBackoffMs + "ms");
+  nextMqttRetryMs = now + mqttBackoffMs;
+  mqttBackoffMs = growBackoff(mqttBackoffMs);
+  return false;
 }
 
 void setup()
@@ -206,23 +320,22 @@ void setup()
   randomSeed(analogRead(0));
   baseTopic = String("device/") + DEVICE_ID;
 
-  connectWifi();
-  connectMqtt();
+  connectWifi(millis());
+  connectMqtt(millis());
   publishHeartbeat();
 }
 
 void loop()
 {
-  if (WiFi.status() != WL_CONNECTED)
+  unsigned long now = millis();
+  bool wifiReady = connectWifi(now);
+  bool mqttReady = wifiReady && connectMqtt(now);
+
+  if (mqttReady)
   {
-    connectWifi();
-  }
-  if (!mqttClient.connected())
-  {
-    connectMqtt();
+    flushOutbox();
   }
 
-  unsigned long now = millis();
   if (now - lastTelemetryMs > TELEMETRY_INTERVAL_S * 1000)
   {
     publishTelemetry();

@@ -63,6 +63,9 @@ export function startMqttService(dataSource: DataSource) {
     username: config.mqtt.user,
     password: config.mqtt.pass,
     clean: true,
+    reconnectPeriod: 2000,
+    connectTimeout: 10_000,
+    queueQoSZero: true,
   };
   if (useTls) {
     connectOptions.rejectUnauthorized = config.mqtt.tls.rejectUnauthorized;
@@ -128,7 +131,7 @@ export function startMqttService(dataSource: DataSource) {
       } else if (parsedTopic.kind === 'commandAck') {
         await handleCommandAck(dataSource, payload as CommandAckPayload);
       } else if (parsedTopic.kind === 'lwtStatus') {
-        await handleLwt(dataSource, parsedTopic.deviceId, payload as LwtPayload);
+        await handleLwt(dataSource, client, parsedTopic.deviceId, payload as LwtPayload);
       }
     } catch (err) {
       logger.error({ err }, 'MQTT message error');
@@ -163,6 +166,20 @@ function triggerAutomationAsync(
     )
     .catch((err) => {
       logger.error({ err, homeId, triggerContext }, 'trigger automation from mqtt failed');
+    });
+}
+
+function dispatchPendingForDeviceAsync(
+  dataSource: DataSource,
+  client: MqttClient,
+  deviceId: string,
+) {
+  void import('./commandService.js')
+    .then(({ dispatchPendingCommandsForDevice }) =>
+      dispatchPendingCommandsForDevice(dataSource, client, deviceId),
+    )
+    .catch((err) => {
+      logger.warn({ err, deviceId }, 'dispatch pending commands for device failed');
     });
 }
 
@@ -220,6 +237,7 @@ async function handleRegister(
   for (const ackTopic of ackTopics) {
     client.publish(ackTopic, ackPayload, { qos: 1 });
   }
+  dispatchPendingForDeviceAsync(dataSource, client, device.deviceId);
   logger.info({ deviceId: payload.deviceId }, 'Register handled');
 }
 
@@ -344,12 +362,20 @@ export async function markTimeouts(dataSource: DataSource, timeoutMs = 5000) {
   }
 }
 
-async function handleLwt(dataSource: DataSource, deviceId: string, payload: { status: 'online' | 'offline'; ts?: number }) {
+async function handleLwt(
+  dataSource: DataSource,
+  client: MqttClient,
+  deviceId: string,
+  payload: { status: 'online' | 'offline'; ts?: number },
+) {
   const repo = dataSource.getRepository(Device);
   const device = await repo.findOne({ where: { deviceId } });
   if (!device) return;
   device.status = payload.status;
   device.lastSeen = payload.ts ? new Date(payload.ts * 1000) : new Date();
   await repo.save(device);
+  if (payload.status === 'online') {
+    dispatchPendingForDeviceAsync(dataSource, client, deviceId);
+  }
   logger.debug({ deviceId, status: payload.status }, 'LWT status updated');
 }

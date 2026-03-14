@@ -341,17 +341,44 @@ export function createDeviceRoutes(dataSource: DataSource, mqttClient: import('m
 
     const cmdId = nanoid();
     const cmdRepo = dataSource.getRepository(Command);
+    const canDispatchNow = mqttClient.connected && device.status === 'online';
     const command = cmdRepo.create({
       cmdId,
       method: method.trim(),
       params: params && typeof params === 'object' ? params : {},
-      status: 'sent',
+      status: canDispatchNow ? 'sent' : 'pending',
       device,
       homeId: device.room?.home?.id,
       roomId: device.room?.id,
-      sentAt: new Date(),
+      sentAt: canDispatchNow ? new Date() : undefined,
+      error: canDispatchNow
+        ? undefined
+        : mqttClient.connected
+          ? 'device_offline_queued'
+          : 'mqtt_offline_queued',
     });
     await cmdRepo.save(command);
+
+    if (!canDispatchNow) {
+      logger.debug(
+        {
+          deviceId,
+          cmdId,
+          method: method.trim(),
+          homeId: command.homeId,
+          roomId: command.roomId,
+          deviceStatus: device.status,
+          mqttConnected: mqttClient.connected,
+        },
+        'command queued',
+      );
+      return res.status(202).json({
+        status: 'queued',
+        cmdId,
+        commandStatus: command.status,
+        queuedReason: command.error,
+      });
+    }
 
     try {
       await sendCommand(
@@ -369,11 +396,17 @@ export function createDeviceRoutes(dataSource: DataSource, mqttClient: import('m
         },
       );
     } catch (err) {
-      command.status = 'failed';
-      command.error = 'mqtt_publish_failed';
+      command.status = 'pending';
+      command.error = 'mqtt_publish_failed_queued';
+      command.sentAt = undefined;
       await cmdRepo.save(command);
-      logger.error({ err, deviceId, cmdId }, 'command publish failed');
-      return res.status(502).json({ code: 502, msg: 'command publish failed', cmdId });
+      logger.warn({ err, deviceId, cmdId }, 'command publish failed, queued');
+      return res.status(202).json({
+        status: 'queued',
+        cmdId,
+        commandStatus: command.status,
+        queuedReason: command.error,
+      });
     }
 
     logger.debug(

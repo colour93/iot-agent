@@ -7,7 +7,7 @@ import { startMqttService } from './services/mqttService.js';
 import { registerRoutes } from './routes/index.js';
 import cors from 'cors';
 import { initRedis } from './services/redisClient.js';
-import { sweepCommandTimeouts, retryTimeouts } from './services/commandService.js';
+import { dispatchPendingCommands, sweepCommandTimeouts, retryTimeouts } from './services/commandService.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { startAutomationScheduler } from './services/automationScheduler.js';
 import { refreshAllHomeExternalData } from './services/externalDataService.js';
@@ -60,6 +60,11 @@ async function bootstrap() {
   setInterval(() => {
     retryTimeouts(dataSource, mqttClient, 5000, 2).catch((err) => logger.error(err));
   }, 10000);
+  setInterval(() => {
+    dispatchPendingCommands(dataSource, mqttClient, 5000, 50).catch((err) =>
+      logger.error({ err }, 'dispatch pending commands failed'),
+    );
+  }, 5000);
 
   // 自动化时间调度（按分钟 tick）
   startAutomationScheduler(dataSource, mqttClient);

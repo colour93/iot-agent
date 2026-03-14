@@ -12,6 +12,7 @@
 - P2 阶段新增完成：
   - 生产安全收敛：CORS 白名单校验落地、JWT 强密钥校验（生产环境强制）、MQTT TLS 配置与生产约束。
   - 运维能力（无 Prometheus 依赖）：新增指标告警阈值配置与 `metrics/alerts` 接口，补充 home 维度审计日志查询。
+  - 设备可靠性（阶段完成）：命令离线入队与上线自动补发、固件本地消息 outbox（离线缓冲）与重连退避策略已落地。
 
 ### Summary
 - 目标：把“可演示系统”补齐为“需求闭环系统”，优先完成家庭隔离、自动化事件驱动、命令闭环、NL 创建自动化。
@@ -33,6 +34,7 @@
 - 新增 `GET /api/metrics/alerts` 与 `GET /api/homes/:homeId/metrics/alerts`：按阈值输出当前告警列表。
 - 新增 `GET /api/homes/:homeId/metrics/summary`：家庭维度指标聚合。
 - 新增 `GET /api/homes/:homeId/audit-logs`：家庭维度审计日志查询（支持 `limit/action/result` 过滤）。
+- `POST /api/devices/:deviceId/command` 新增离线策略：设备/MQTT 离线时命令状态为 `pending`（queued），待设备上线后自动补发。
 
 ### TODO（全量，按优先级）
 - [x] P0-01 鉴权闭环：登录注入 `homeIds`，所有 `homes/:homeId/*` 路由统一家庭权限校验。
@@ -51,7 +53,10 @@
 
 - [x] P2-02 生产安全收敛：`cors` 白名单、强 JWT secret、MQTT ACL/TLS 策略。
 - [x] P2-03 运维能力（无 Prometheus 依赖）：内置指标接口规范化、审计日志完善、故障告警阈值配置。
-- [ ] P2-04 设备可靠性：OTA、离线缓冲、本地队列与重连策略增强。
+- [ ] P2-04 设备可靠性总项：OTA、离线缓冲、本地队列与重连策略增强。
+- [x] P2-04a 后端命令可靠性：设备/MQTT 离线时命令入队（`pending`），上线后自动补发，timeout 重试支持离线延期。
+- [x] P2-04b 固件通信可靠性：本地 outbox 队列、离线缓冲、WiFi/MQTT 指数退避重连与恢复后回放。
+- [ ] P2-04c OTA：固件在线升级与版本回滚策略。
 - [ ] P2-05 全智能模式总项（Goal-driven + Human-in-the-loop）：在家庭级别支持“模式、目标、策略、动作建议/执行”完整闭环。
 - [ ] P2-05a 领域模型：新增 `SmartModeProfile`（mode/goals/skills/policy）、`DecisionRecord`（trigger/reasoningSummary/actions/result）及版本化配置。
 - [ ] P2-05b 触发入口：支持阈值触发、周期触发、状态切换触发（离家/回家/睡眠/假期）与手动触发统一编排。
