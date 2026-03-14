@@ -1,52 +1,20 @@
 import { createRoute } from '@tanstack/react-router';
-import { Route as RootRoute } from './__root';
-import { useAppStore } from '../lib/store';
+import { Route as RootRoute } from '../__root';
+import { useAppStore } from '../../lib/store';
 import { useState } from 'react';
-import { useAutomations } from '../lib/swr-hooks';
-import { api } from '../lib/api';
-import { Button } from '../components/ui/button';
-import { Card, CardContent, CardHeader } from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Alert } from '../components/ui/alert';
+import { useAutomations } from '../../lib/swr-hooks';
+import { api } from '../../lib/api';
+import { Button } from '../../components/ui/button';
+import { Card, CardContent, CardHeader } from '../../components/ui/card';
+import { Input } from '../../components/ui/input';
+import { Alert } from '../../components/ui/alert';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { RuleStat } from './components/rule-stat';
+import { defaultDefinition, presetTemplates } from './constants';
 
-const defaultDefinition = {
-  conditions: [{ kind: 'attr', deviceId: 'esp32-demo-1', path: 'temperature', op: 'gt', value: 28 }],
-  actions: [{ kind: 'command', deviceId: 'ac-1', method: 'set_ac', params: { mode: 'cool', temp: 25 } }],
-};
-
-const presetTemplates = [
-  {
-    name: '客厅温度过高自动降温',
-    definition: {
-      conditions: [{ kind: 'attr', deviceId: 'esp32-demo-1', path: 'temperature', op: 'gt', value: 28 }],
-      actions: [{ kind: 'command', deviceId: 'ac-1', method: 'set_ac', params: { mode: 'cool', temp: 25 } }],
-    },
-  },
-  {
-    name: '夜间湿度过低开启加湿',
-    definition: {
-      conditions: [
-        { kind: 'attr', deviceId: 'esp32-demo-1', path: 'humidity', op: 'lt', value: 40 },
-        { kind: 'context', path: 'time.hour', op: 'gte', value: 22 },
-      ],
-      actions: [{ kind: 'command', deviceId: 'humidifier-1', method: 'set_humidifier', params: { on: true, level: 2 } }],
-    },
-  },
-];
-
-function RuleStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="surface-panel relative overflow-hidden rounded-xl p-3">
-      <div className="text-[0.68rem] uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
-      <div className="mt-1 text-xl font-semibold">{value}</div>
-    </div>
-  );
-}
-
-function AutomationsPage() {
+const AutomationsPage = () => {
   const selectedHome = useAppStore((s) => s.selectedHome);
   const token = useAppStore((s) => s.token);
   const { data: automations = [], mutate } = useAutomations(selectedHome);
@@ -238,7 +206,7 @@ function AutomationsPage() {
       </div>
     </div>
   );
-}
+};
 
 export const Route = createRoute({
   getParentRoute: () => RootRoute,

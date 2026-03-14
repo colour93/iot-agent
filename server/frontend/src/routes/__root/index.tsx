@@ -1,9 +1,9 @@
 import { createRootRoute, Outlet, Link, useNavigate, redirect, useLocation } from '@tanstack/react-router';
-import { useAppStore } from '../lib/store';
+import { useAppStore } from '../../lib/store';
 import { useEffect } from 'react';
-import { Button } from '../components/ui/button';
-import { useHomeStructure, useHomes } from '../lib/swr-hooks';
-import { cn } from '../lib/utils';
+import { Button } from '../../components/ui/button';
+import { useHomeStructure, useHomes } from '../../lib/swr-hooks';
+import { cn } from '../../lib/utils';
 
 const navItems = [
   { to: '/', label: '总览' },
@@ -12,7 +12,7 @@ const navItems = [
   { to: '/observability', label: '观测' },
 ];
 
-function Shell() {
+const Shell = () => {
   const hydrate = useAppStore((s) => s.hydrate);
   const token = useAppStore((s) => s.token);
   const user = useAppStore((s) => s.user);
@@ -119,7 +119,7 @@ function Shell() {
       </main>
     </div>
   );
-}
+};
 
 export const Route = createRootRoute({
   component: Shell,

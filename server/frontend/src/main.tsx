@@ -8,7 +8,7 @@ import { SWRConfig } from 'swr';
 import { Toaster, toast } from 'sonner';
 import './index.css';
 import { Route as RootRoute } from './routes/__root';
-import { Route as IndexRoute } from './routes';
+import { Route as IndexRoute } from './routes/index';
 import { Route as AutomationsRoute } from './routes/automations';
 import { Route as ChatRoute } from './routes/chat';
 import { Route as ObservabilityRoute } from './routes/observability';

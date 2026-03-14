@@ -1,24 +1,13 @@
 import { createRoute } from '@tanstack/react-router';
-import { Route as RootRoute } from './__root';
-import { useAppStore } from '../lib/store';
-import { useAutomations, useDevices, useMetricsSummary, useMqttMetrics } from '../lib/swr-hooks';
-import { Card, CardContent, CardHeader } from '../components/ui/card';
-import { Table, TBody, TD, TH, THead, TR } from '../components/ui/table';
-import { Alert } from '../components/ui/alert';
+import { Route as RootRoute } from '../__root';
+import { useAppStore } from '../../lib/store';
+import { useAutomations, useDevices, useMetricsSummary, useMqttMetrics } from '../../lib/swr-hooks';
+import { Card, CardContent, CardHeader } from '../../components/ui/card';
+import { Table, TBody, TD, TH, THead, TR } from '../../components/ui/table';
+import { Alert } from '../../components/ui/alert';
+import { MetricCard } from './components/metric-card';
 
-function MetricCard({ title, value, desc }: { title: string; value: string; desc: string }) {
-  return (
-    <Card className="surface-panel relative overflow-hidden rounded-xl">
-      <CardContent className="space-y-1 p-4">
-        <div className="text-[0.68rem] uppercase tracking-[0.2em] text-muted-foreground">{title}</div>
-        <div className="text-2xl font-semibold">{value}</div>
-        <div className="text-xs text-muted-foreground">{desc}</div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ObservabilityPage() {
+const ObservabilityPage = () => {
   const selectedHome = useAppStore((s) => s.selectedHome);
   const { data: devices = [] } = useDevices(selectedHome);
   const { data: automations = [] } = useAutomations(selectedHome);
@@ -113,7 +102,7 @@ function ObservabilityPage() {
       </Card>
     </div>
   );
-}
+};
 
 export const Route = createRoute({
   getParentRoute: () => RootRoute,

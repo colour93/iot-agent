@@ -6,7 +6,7 @@ type AlertProps = PropsWithChildren<{
   variant?: 'default' | 'destructive';
 }>;
 
-export function Alert({ className, variant = 'default', children }: AlertProps) {
+export const Alert = ({ className, variant = 'default', children }: AlertProps) => {
   return (
     <div
       className={cn(
@@ -20,5 +20,5 @@ export function Alert({ className, variant = 'default', children }: AlertProps) 
       {children}
     </div>
   );
-}
+};
 

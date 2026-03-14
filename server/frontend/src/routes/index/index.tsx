@@ -1,15 +1,15 @@
 import { createRoute, Link } from '@tanstack/react-router';
-import { Route as RootRoute } from './__root';
-import { useAppStore } from '../lib/store';
-import { useAutomations, useHomeStructure, useHomes } from '../lib/swr-hooks';
+import { Route as RootRoute } from '../__root';
+import { useAppStore } from '../../lib/store';
+import { useAutomations, useHomeStructure, useHomes } from '../../lib/swr-hooks';
 import { useEffect, useMemo, useState } from 'react';
-import { Button } from '../components/ui/button';
-import { Card, CardContent, CardHeader } from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Alert } from '../components/ui/alert';
-import { api } from '../lib/api';
+import { Button } from '../../components/ui/button';
+import { Card, CardContent, CardHeader } from '../../components/ui/card';
+import { Input } from '../../components/ui/input';
+import { Alert } from '../../components/ui/alert';
+import { api } from '../../lib/api';
 import { mutate } from 'swr';
-import type { Device, Room } from '../lib/types';
+import type { Device, Room } from '../../lib/types';
 import {
   Dialog,
   DialogContent,
@@ -17,335 +17,25 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../components/ui/dialog';
+} from '../../components/ui/dialog';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../components/ui/select';
+} from '../../components/ui/select';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 
-type DeviceCategory = 'sensor' | 'actuator' | 'both';
+import { nativeSelectClassName } from './constants';
+import { DevicePanel } from './components/device-panel';
+import { EmptyRoomsPlaceholder } from './components/empty-rooms-placeholder';
+import { MetricTile } from './components/metric-tile';
+import { QuickStartCard } from './components/quick-start-card';
+import { RoomTabs } from './components/room-tabs';
+import type { DeviceCategory, DeviceDraft } from './types';
 
-type DeviceDraft = {
-  deviceId?: string;
-  name: string;
-  type: string;
-  category: DeviceCategory;
-  roomId: string;
-};
-
-const nativeSelectClassName =
-  'h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/70';
-
-function MetricTile({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <div className="surface-panel relative overflow-hidden p-4">
-      <div className="text-[0.72rem] tracking-[0.18em] text-muted-foreground">{label}</div>
-      <div className="mt-2 text-2xl font-semibold">{value}</div>
-      <div className="mt-1 text-xs text-muted-foreground">{hint}</div>
-    </div>
-  );
-}
-
-function RoomTabs({
-  rooms,
-  currentRoomId,
-  onSelect,
-  onEdit,
-  onDelete,
-}: {
-  rooms: Room[];
-  currentRoomId?: string;
-  onSelect: (room: Room) => void;
-  onEdit: (room: Room) => void;
-  onDelete: (room: Room) => void;
-}) {
-  return (
-    <div className="overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <div className="inline-flex min-w-full gap-2 rounded-[1rem] border border-border/70 bg-muted/40 p-1.5">
-        {rooms.map((room) => {
-          const active = room.id === currentRoomId;
-          return (
-            <div
-              key={room.id}
-              className={`flex min-w-[168px] items-start gap-2 rounded-[0.75rem] px-2 py-2 text-left text-xs transition-all ${
-                active
-                  ? 'border border-primary/25 bg-card text-foreground shadow-[0_12px_26px_-22px_oklch(0.29_0.08_220_/_34%)]'
-                  : 'border border-transparent text-muted-foreground hover:border-primary/12 hover:bg-card/70 hover:text-foreground'
-              }`}
-            >
-              <button type="button" onClick={() => onSelect(room)} className="min-w-0 flex-1 px-1 text-left">
-                <div className="truncate font-semibold">{room.name}</div>
-                <div className="mt-1 flex items-center gap-2 text-[11px]">
-                  <span>{room.devicesCount ?? 0} 设备</span>
-                  <span>{room.onlineDevicesCount ?? 0} 在线</span>
-                </div>
-              </button>
-              <div className="flex shrink-0 items-center gap-1">
-                <button
-                  type="button"
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/70 bg-background/70 text-muted-foreground transition-colors hover:border-primary/18 hover:text-foreground"
-                  title={`编辑 ${room.name}`}
-                  onClick={() => onEdit(room)}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/70 bg-background/70 text-muted-foreground transition-colors hover:border-destructive/35 hover:text-destructive"
-                  title={`删除 ${room.name}`}
-                  onClick={() => onDelete(room)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function DevicePanel({
-  device,
-  onEdit,
-  onDelete,
-  onSendCommand,
-}: {
-  device: Device;
-  onEdit: (device: Device) => void;
-  onDelete: (deviceId: string) => Promise<void>;
-  onSendCommand: (deviceId: string, method: string, params: Record<string, unknown>, roomId: string) => Promise<void>;
-}) {
-  const [deleteArmed, setDeleteArmed] = useState(false);
-
-  return (
-    <article className="surface-panel relative overflow-hidden rounded-[1.15rem] p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-sm font-semibold">{device.name}</div>
-          <div className="mt-1 text-xs text-muted-foreground">{device.deviceId}</div>
-        </div>
-        <span
-          className={`rounded-full border px-2 py-0.5 text-xs ${
-            device.status === 'online'
-              ? 'status-live border-emerald-200 bg-emerald-50 text-emerald-700'
-              : 'border-slate-200 bg-slate-100 text-slate-500'
-          }`}
-        >
-          {device.status === 'online' ? '在线' : '离线'}
-        </span>
-      </div>
-
-      <div className="mt-3 space-y-1 text-xs">
-        {device.attrs && Object.keys(device.attrs).length > 0 ? (
-          Object.entries(device.attrs).map(([key, value]) => (
-            <div key={key} className="flex items-center justify-between gap-3 rounded bg-muted/40 px-2 py-1">
-              <span className="text-muted-foreground">{key}</span>
-              <span>{String(value)}</span>
-            </div>
-          ))
-        ) : (
-          <div className="text-muted-foreground">还没有属性快照</div>
-        )}
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-1">
-        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px]">category:{device.category || 'both'}</span>
-        {(device.capabilities || []).slice(0, 4).map((cap) => (
-          <span key={`${device.deviceId}-${cap.kind}-${cap.name}`} className="rounded-full bg-muted px-2 py-0.5 text-[11px]">
-            {cap.kind}:{cap.name}
-          </span>
-        ))}
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button size="sm" variant="outline" onClick={() => onEdit(device)}>
-          编辑设备
-        </Button>
-        <Button
-          size="sm"
-          variant={deleteArmed ? 'secondary' : 'outline'}
-          onClick={async () => {
-            if (!deleteArmed) {
-              setDeleteArmed(true);
-              return;
-            }
-            await onDelete(device.deviceId);
-            setDeleteArmed(false);
-          }}
-        >
-          {deleteArmed ? '确认删除' : '删除设备'}
-        </Button>
-      </div>
-      {deleteArmed ? <Alert variant="destructive" className="mt-3 text-xs">再点一次确认删除设备。</Alert> : null}
-
-      <form
-        className="mt-3 space-y-2"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          const form = event.currentTarget;
-          const method = (form.elements.namedItem('method') as HTMLInputElement).value;
-          const raw = (form.elements.namedItem('value') as HTMLInputElement).value.trim();
-          let value: unknown = raw;
-          if (raw) {
-            try {
-              value = JSON.parse(raw);
-            } catch {
-              value = raw;
-            }
-          }
-          await onSendCommand(device.deviceId, method, raw ? { value } : {}, device.roomId);
-          form.reset();
-        }}
-      >
-        <Input
-          name="method"
-          placeholder="方法名"
-          defaultValue={device.capabilities?.find((cap) => cap.kind === 'method')?.name || 'set_led'}
-        />
-        <Input name="value" placeholder='参数值，支持 JSON，例如 {"value":1}' />
-        <Button type="submit" size="sm" className="w-full">
-          下发命令
-        </Button>
-      </form>
-    </article>
-  );
-}
-
-function SetupStep({
-  index,
-  title,
-  description,
-  done,
-  actionLabel,
-  onAction,
-}: {
-  index: number;
-  title: string;
-  description: string;
-  done: boolean;
-  actionLabel: string;
-  onAction: () => void;
-}) {
-  return (
-    <div
-      className={`inset-panel rounded-[1rem] p-3 transition-colors ${
-        done ? 'border-emerald-200/70 bg-emerald-50/70' : 'border-border/65'
-      }`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <span
-            className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-              done ? 'bg-emerald-100 text-emerald-700' : 'bg-muted text-foreground'
-            }`}
-          >
-            {index}
-          </span>
-          <div>
-            <p className="text-sm font-semibold text-foreground">{title}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-          </div>
-        </div>
-        <span className={`data-pill whitespace-nowrap ${done ? 'status-live' : ''}`}>{done ? '已完成' : '待完成'}</span>
-      </div>
-      {!done ? (
-        <Button size="sm" variant="outline" className="mt-3" onClick={onAction}>
-          {actionLabel}
-        </Button>
-      ) : null}
-    </div>
-  );
-}
-
-function QuickStartCard({
-  hasHome,
-  hasRoom,
-  hasDevice,
-  onCreateHome,
-  onCreateRoom,
-  onPreRegisterDevice,
-}: {
-  hasHome: boolean;
-  hasRoom: boolean;
-  hasDevice: boolean;
-  onCreateHome: () => void;
-  onCreateRoom: () => void;
-  onPreRegisterDevice: () => void;
-}) {
-  const completedCount = Number(hasHome) + Number(hasRoom) + Number(hasDevice);
-  const progress = `${Math.round((completedCount / 3) * 100)}%`;
-
-  return (
-    <Card className="surface-panel relative overflow-hidden">
-      <div className="ambient-orb -right-10 -top-8 bg-[oklch(0.78_0.08_220_/_20%)]" />
-      <CardHeader className="relative space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold">快速开始</p>
-            <p className="mt-1 text-xs text-muted-foreground">完成这 3 步后，设备控制和自动化会更顺畅。</p>
-          </div>
-          <span className="data-pill">{completedCount}/3</span>
-        </div>
-        <div className="h-2 overflow-hidden rounded-full bg-muted">
-          <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: progress }} />
-        </div>
-      </CardHeader>
-      <CardContent className="relative space-y-2.5">
-        <SetupStep
-          index={1}
-          title="创建家庭"
-          description="先确认你当前要管理的真实空间。"
-          done={hasHome}
-          actionLabel="新建家庭"
-          onAction={onCreateHome}
-        />
-        <SetupStep
-          index={2}
-          title="添加房间"
-          description="按实际场景拆分，例如客厅、主卧、书房。"
-          done={hasRoom}
-          actionLabel="添加房间"
-          onAction={onCreateRoom}
-        />
-        <SetupStep
-          index={3}
-          title="预注册设备"
-          description="把设备归到房间，命令和自动化才能精准落位。"
-          done={hasDevice}
-          actionLabel="预注册设备"
-          onAction={onPreRegisterDevice}
-        />
-      </CardContent>
-    </Card>
-  );
-}
-
-function EmptyRoomsPlaceholder({ onCreateRoom }: { onCreateRoom: () => void }) {
-  return (
-    <section className="surface-panel relative overflow-hidden px-8 py-12 text-center sm:px-12 sm:py-16">
-      <div className="ambient-orb -left-10 top-2 bg-[oklch(0.74_0.07_218_/_20%)]" />
-      <div className="ambient-orb -right-10 bottom-0 bg-[oklch(0.92_0.02_92_/_40%)] [animation-delay:0.5s]" />
-      <div className="relative mx-auto max-w-xl">
-        <p className="section-eyebrow">房间为空</p>
-        <h3 className="mt-2 text-2xl font-semibold">当前家庭还没有房间</h3>
-        <p className="mt-3 text-sm text-muted-foreground">
-          先创建一个房间，再添加设备和自动化。这里不会再显示示例房间内容。
-        </p>
-        <Button className="mt-6" onClick={onCreateRoom}>
-          立即创建第一个房间
-        </Button>
-      </div>
-    </section>
-  );
-}
-
-function Dashboard() {
+const Dashboard = () => {
   const selectedHome = useAppStore((s) => s.selectedHome);
   const selectedRoom = useAppStore((s) => s.selectedRoom);
   const selectHome = useAppStore((s) => s.selectHome);
@@ -507,11 +197,16 @@ function Dashboard() {
   };
 
   const openEditDeviceModal = (device: Device) => {
+    const normalizedCategory: DeviceCategory =
+      device.category === 'sensor' || device.category === 'actuator' || device.category === 'both'
+        ? device.category
+        : 'both';
+
     setEditingDeviceId(device.deviceId);
     setEditDeviceDraft({
       name: device.name,
       type: device.type || '',
-      category: device.category || 'both',
+      category: normalizedCategory,
       roomId: device.roomId,
     });
     setEditDeviceOpen(true);
@@ -1148,7 +843,7 @@ function Dashboard() {
       </Dialog>
     </>
   );
-}
+};
 
 export const Route = createRoute({
   getParentRoute: () => RootRoute,
