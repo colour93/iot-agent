@@ -1,19 +1,59 @@
-export type Condition =
-  | { kind: 'attr'; deviceId: string; path: string; op: 'gt' | 'gte' | 'lt' | 'lte' | 'eq'; value: number | string | boolean }
-  | { kind: 'event'; deviceId: string; eventType: string }
-  | { kind: 'time'; cron: string }
-  | { kind: 'external'; source: 'weather' | 'season'; key: string; op: 'gt' | 'gte' | 'lt' | 'lte' | 'eq'; value: number | string };
+import { z } from 'zod';
 
-export type Action =
-  | { kind: 'command'; deviceId: string; method: string; params: Record<string, unknown> }
-  | { kind: 'notify'; channel: 'log'; message: string }
-  | { kind: 'llm'; role: 'back'; prompt: string };
+const comparisonOpSchema = z.enum(['gt', 'gte', 'lt', 'lte', 'eq']);
 
-export interface AutomationRule {
-  name: string;
-  enabled: boolean;
-  conditions: Condition[];
-  actions: Action[];
-  scope?: string;
-}
+export const automationConditionSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('attr'),
+    deviceId: z.string().min(1),
+    path: z.string().min(1),
+    op: comparisonOpSchema,
+    value: z.union([z.number(), z.string(), z.boolean()]),
+  }),
+  z.object({
+    kind: z.literal('event'),
+    deviceId: z.string().min(1),
+    eventType: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal('time'),
+    cron: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal('external'),
+    source: z.enum(['weather', 'season']),
+    key: z.string().min(1),
+    op: comparisonOpSchema,
+    value: z.union([z.number(), z.string()]),
+  }),
+]);
 
+export const automationActionSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('command'),
+    deviceId: z.string().min(1),
+    method: z.string().min(1),
+    params: z.record(z.unknown()).default({}),
+  }),
+  z.object({
+    kind: z.literal('notify'),
+    channel: z.literal('log'),
+    message: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal('llm'),
+    role: z.literal('back'),
+    prompt: z.string().min(1),
+  }),
+]);
+
+export const automationDefinitionSchema = z
+  .object({
+    conditions: z.array(automationConditionSchema).min(1),
+    actions: z.array(automationActionSchema).min(1),
+  })
+  .passthrough();
+
+export type Condition = z.infer<typeof automationConditionSchema>;
+export type Action = z.infer<typeof automationActionSchema>;
+export type AutomationRule = z.infer<typeof automationDefinitionSchema>;

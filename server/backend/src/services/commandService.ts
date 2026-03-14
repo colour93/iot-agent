@@ -26,17 +26,16 @@ export async function retryTimeouts(
   const list = await repo.find({ where: { status: 'timeout' } });
   for (const cmd of list) {
     if (cmd.retryCount >= maxRetry) continue;
+    if (!cmd.device?.deviceId) continue;
     cmd.retryCount += 1;
     cmd.status = 'sent';
     cmd.sentAt = new Date();
     await repo.save(cmd);
-    if (cmd.homeId && cmd.roomId) {
-      await sendCommand(mqttClient, cmd.device.deviceId, {
-        cmdId: cmd.cmdId,
-        method: cmd.method,
-        params: cmd.params,
-        timeout: timeoutMs,
-      });
-    }
+    await sendCommand(mqttClient, cmd.device.deviceId, {
+      cmdId: cmd.cmdId,
+      method: cmd.method,
+      params: cmd.params,
+      timeout: timeoutMs,
+    });
   }
 }

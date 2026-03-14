@@ -78,10 +78,10 @@ export function startMqttService(dataSource: DataSource) {
       if (topic.endsWith('/register')) {
         await handleRegister(dataSource, client, deviceId, payload as RegisterPayload);
       } else if (topic.endsWith('/telemetry')) {
-        await handleTelemetry(dataSource, deviceId, payload as TelemetryPayload);
+        await handleTelemetry(dataSource, client, deviceId, payload as TelemetryPayload);
       } else if (topic.includes('/event/')) {
         const eventType = parts[3];
-        await handleEvent(dataSource, deviceId, eventType, payload as EventPayload);
+        await handleEvent(dataSource, client, deviceId, eventType, payload as EventPayload);
       } else if (topic.endsWith('/command/ack')) {
         await handleCommandAck(dataSource, payload as CommandAckPayload);
       } else if (topic.endsWith('/lwt/status')) {
@@ -104,6 +104,23 @@ export function startMqttService(dataSource: DataSource) {
   });
 
   return client;
+}
+
+function triggerAutomationAsync(
+  dataSource: DataSource,
+  client: MqttClient,
+  homeId: string | undefined,
+  triggerContext: Record<string, unknown>,
+) {
+  if (!homeId) return;
+
+  void import('./automationEngine.js')
+    .then(({ evaluateAutomation }) =>
+      evaluateAutomation(dataSource, client, homeId, triggerContext),
+    )
+    .catch((err) => {
+      logger.error({ err, homeId, triggerContext }, 'trigger automation from mqtt failed');
+    });
 }
 
 async function handleRegister(
@@ -154,6 +171,7 @@ async function handleRegister(
 
 async function handleTelemetry(
   dataSource: DataSource,
+  client: MqttClient,
   deviceId: string,
   payload: TelemetryPayload,
 ) {
@@ -180,10 +198,28 @@ async function handleTelemetry(
     payload: payload.attrs,
   });
   await dataSource.getRepository(TelemetryLog).save(telemetry);
+
+  if (device?.room?.home?.id) {
+    const triggerContext: Record<string, unknown> = {
+      source: 'telemetry',
+      homeId: device.room.home.id,
+      roomId: device.room?.id,
+      deviceId,
+      ts: payload.ts,
+      attrs: payload.attrs,
+    };
+    for (const [key, value] of Object.entries(payload.attrs ?? {})) {
+      triggerContext[key] = value;
+      triggerContext[`${deviceId}.${key}`] = value;
+    }
+
+    triggerAutomationAsync(dataSource, client, device.room.home.id, triggerContext);
+  }
 }
 
 async function handleEvent(
   dataSource: DataSource,
+  client: MqttClient,
   deviceId: string,
   eventType: string,
   payload: EventPayload,
@@ -197,6 +233,24 @@ async function handleEvent(
   });
   await dataSource.getRepository(DeviceEvent).save(event);
   logger.info({ eventType, deviceId }, 'Event saved');
+
+  if (device?.room?.home?.id) {
+    const triggerContext: Record<string, unknown> = {
+      source: 'event',
+      homeId: device.room.home.id,
+      roomId: device.room?.id,
+      deviceId,
+      eventType,
+      ts: payload.ts,
+      params: payload.params ?? {},
+    };
+    for (const [key, value] of Object.entries(payload.params ?? {})) {
+      triggerContext[key] = value;
+      triggerContext[`event.${key}`] = value;
+    }
+
+    triggerAutomationAsync(dataSource, client, device.room.home.id, triggerContext);
+  }
 }
 
 async function handleCommandAck(dataSource: DataSource, payload: CommandAckPayload) {
@@ -242,4 +296,3 @@ async function handleLwt(dataSource: DataSource, deviceId: string, payload: { st
   await repo.save(device);
   logger.debug({ deviceId, status: payload.status }, 'LWT status updated');
 }
-

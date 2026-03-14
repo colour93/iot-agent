@@ -57,7 +57,7 @@ const ChatWorkspace = ({
 
   const { messages, sendMessage, status, error } = useChat({
     id: sessionId,
-    messages: initialMessages,
+    messages: initialMessages as never,
     transport: transport as never,
     onFinish: () => {
       onSessionSynced?.();
@@ -510,7 +510,7 @@ const ChatPage = () => {
       </div>
       <Button
         variant="outline"
-        size="icon"
+        size="sm"
         className={cn(
           "fixed top-1/2 z-30 size-9 -translate-y-1/2 rounded-full border-border/80 bg-background/92 shadow-[0_12px_24px_-16px_oklch(0.28_0.02_240_/_45%)] backdrop-blur transition-[left] duration-300 hover:!translate-y-[-50%]",
           sidebarCollapsed ? "left-2" : "left-[calc(18rem+0.5rem)]",

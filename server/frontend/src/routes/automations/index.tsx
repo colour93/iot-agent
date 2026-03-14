@@ -19,10 +19,54 @@ const AutomationsPage = () => {
   const token = useAppStore((s) => s.token);
   const { data: automations = [], mutate } = useAutomations(selectedHome);
   const [name, setName] = useState('新建自动化');
+  const [nlPrompt, setNlPrompt] = useState('');
   const [workingId, setWorkingId] = useState<string | null>(null);
+  const conditionSchema = z.discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('attr'),
+      deviceId: z.string().min(1),
+      path: z.string().min(1),
+      op: z.enum(['gt', 'gte', 'lt', 'lte', 'eq']),
+      value: z.union([z.number(), z.string(), z.boolean()]),
+    }),
+    z.object({
+      kind: z.literal('event'),
+      deviceId: z.string().min(1),
+      eventType: z.string().min(1),
+    }),
+    z.object({
+      kind: z.literal('time'),
+      cron: z.string().min(1),
+    }),
+    z.object({
+      kind: z.literal('external'),
+      source: z.enum(['weather', 'season']),
+      key: z.string().min(1),
+      op: z.enum(['gt', 'gte', 'lt', 'lte', 'eq']),
+      value: z.union([z.number(), z.string()]),
+    }),
+  ]);
+  const actionSchema = z.discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('command'),
+      deviceId: z.string().min(1),
+      method: z.string().min(1),
+      params: z.record(z.unknown()).default({}),
+    }),
+    z.object({
+      kind: z.literal('notify'),
+      channel: z.literal('log'),
+      message: z.string().min(1),
+    }),
+    z.object({
+      kind: z.literal('llm'),
+      role: z.literal('back'),
+      prompt: z.string().min(1),
+    }),
+  ]);
   const schema = z.object({
-    conditions: z.array(z.any()),
-    actions: z.array(z.any()),
+    conditions: z.array(conditionSchema).min(1),
+    actions: z.array(actionSchema).min(1),
   });
   const form = useForm({
     resolver: zodResolver(
@@ -46,7 +90,7 @@ const AutomationsPage = () => {
   });
   const { register, handleSubmit, formState, setValue, getValues } = form;
   const enabledCount = automations.filter((item) => item.enabled).length;
-  const llmCount = automations.filter((item) => item.source === 'llm').length;
+  const llmCount = automations.filter((item) => item.source === 'nl').length;
 
   return (
     <div className="space-y-6">
@@ -67,7 +111,7 @@ const AutomationsPage = () => {
         <div className="relative mt-4 grid gap-3 sm:grid-cols-3">
           <RuleStat label="规则总数" value={String(automations.length)} />
           <RuleStat label="已启用" value={String(enabledCount)} />
-          <RuleStat label="LLM 来源" value={String(llmCount)} />
+          <RuleStat label="NL 来源" value={String(llmCount)} />
         </div>
       </section>
 
@@ -165,6 +209,43 @@ const AutomationsPage = () => {
             <p className="rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
               编辑器要求 `conditions` 与 `actions` 为数组。点击“格式化 JSON”可自动整理结构，便于审阅。
             </p>
+            <div className="space-y-2 rounded-lg border border-border/70 bg-muted/35 p-3">
+              <div className="text-xs font-semibold text-muted-foreground">自然语言创建（MVP）</div>
+              <textarea
+                className="h-20 w-full resize-none rounded-md border border-border/80 bg-background/92 px-3 py-2 text-xs outline-none transition-[border-color,box-shadow,background-color] duration-200 focus:border-primary/20 focus:ring-2 focus:ring-ring/70"
+                placeholder="例如：当客厅温度高于 28 度时，把空调设置为制冷 25 度"
+                value={nlPrompt}
+                onChange={(event) => setNlPrompt(event.target.value)}
+              />
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!selectedHome || !nlPrompt.trim() || workingId === 'nl-create'}
+                  onClick={async () => {
+                    if (!selectedHome) return;
+                    setWorkingId('nl-create');
+                    try {
+                      const created = await api.createAutomationFromNL(
+                        selectedHome,
+                        { prompt: nlPrompt.trim(), enabled: true },
+                        token,
+                      );
+                      setName(created.automation.name);
+                      setValue('json', JSON.stringify(created.automation.definition, null, 2), {
+                        shouldValidate: true,
+                      });
+                      setNlPrompt('');
+                      await mutate();
+                    } finally {
+                      setWorkingId(null);
+                    }
+                  }}
+                >
+                  {workingId === 'nl-create' ? '生成中...' : '生成并保存'}
+                </Button>
+              </div>
+            </div>
             <form
               className="space-y-2"
               onSubmit={handleSubmit(async (values: { json: string }) => {

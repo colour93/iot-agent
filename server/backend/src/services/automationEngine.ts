@@ -1,10 +1,16 @@
 import { DataSource } from 'typeorm';
-import { Automation, AutomationRun, Command } from '../entities/index.js';
+import { Automation, AutomationRun, Command, Device } from '../entities/index.js';
 import { logger } from '../logger.js';
-import { Action, AutomationRule, Condition } from '../types/automation.js';
+import {
+  Action,
+  AutomationRule,
+  Condition,
+  automationDefinitionSchema,
+} from '../types/automation.js';
 import { sendCommand } from './mqttService.js';
 import mqtt from 'mqtt';
 import crypto from 'crypto';
+import { callLLM } from './llmService.js';
 
 function evalCondition(cond: Condition, ctx: Record<string, unknown>): boolean {
   if (cond.kind === 'event') {
@@ -55,19 +61,42 @@ function evalCondition(cond: Condition, ctx: Record<string, unknown>): boolean {
 
 async function runAction(
   action: Action,
-  ctx: { mqttClient: mqtt.MqttClient; homeId: string; roomId?: string },
+  ctx: {
+    mqttClient: mqtt.MqttClient;
+    homeId: string;
+    roomId?: string;
+    triggerContext: Record<string, unknown>;
+  },
   dataSource: DataSource,
 ) {
   if (action.kind === 'command') {
+    const deviceRepo = dataSource.getRepository(Device);
+    const device = await deviceRepo.findOne({
+      where: {
+        deviceId: action.deviceId,
+        room: {
+          home: {
+            id: ctx.homeId,
+          },
+        },
+      } as any,
+      relations: {
+        room: true,
+      } as any,
+    });
+    if (!device) {
+      throw new Error(`automation target device not found: ${action.deviceId}`);
+    }
+
     const cmdRepo = dataSource.getRepository(Command);
     const cmd = cmdRepo.create({
       cmdId: action.params['cmdId']?.toString() ?? crypto.randomUUID(),
       method: action.method,
       params: action.params,
       status: 'sent',
-      device: { deviceId: action.deviceId } as any,
+      device,
       homeId: ctx.homeId,
-      roomId: ctx.roomId,
+      roomId: device.room?.id ?? ctx.roomId,
       sentAt: new Date(),
     });
     await cmdRepo.save(cmd);
@@ -77,10 +106,35 @@ async function runAction(
       params: action.params,
       timeout: 5000,
     });
+    return {
+      kind: 'command',
+      cmdId: cmd.cmdId,
+      deviceId: action.deviceId,
+      method: action.method,
+      status: 'sent',
+    };
   } else if (action.kind === 'notify') {
     logger.info({ message: action.message }, '[AUTO][notify]');
+    return {
+      kind: 'notify',
+      channel: action.channel,
+      message: action.message,
+      status: 'logged',
+    };
   } else if (action.kind === 'llm') {
-    logger.info({ prompt: action.prompt }, '[AUTO][llm prompt]');
+    const text = await callLLM(
+      dataSource,
+      ctx.mqttClient,
+      ctx.homeId,
+      'back',
+      action.prompt,
+      ctx.triggerContext,
+    );
+    return {
+      kind: 'llm',
+      role: action.role,
+      text,
+    };
   }
 }
 
@@ -89,15 +143,29 @@ export async function evaluateAutomation(
   mqttClient: mqtt.MqttClient,
   homeId: string,
   triggerContext: Record<string, unknown>,
+  options: { automationId?: string } = {},
 ) {
   const automationRepo = dataSource.getRepository(Automation);
   const runRepo = dataSource.getRepository(AutomationRun);
-  const list = await automationRepo.find({ where: { home: { id: homeId }, enabled: true } });
+  const where = options.automationId
+    ? ({ id: options.automationId, home: { id: homeId }, enabled: true } as any)
+    : ({ home: { id: homeId }, enabled: true } as any);
+  const list = await automationRepo.find({ where });
+
   for (const automation of list) {
-    const rule = automation.definition as unknown as AutomationRule;
-    if (!rule?.conditions?.length) continue;
+    const parsedDefinition = automationDefinitionSchema.safeParse(automation.definition);
+    if (!parsedDefinition.success) {
+      logger.warn(
+        { automationId: automation.id, issues: parsedDefinition.error.issues },
+        'Skip invalid automation definition',
+      );
+      continue;
+    }
+
+    const rule = parsedDefinition.data as AutomationRule;
     const hit = rule.conditions.every((c) => evalCondition(c, triggerContext));
     if (!hit) continue;
+
     const run = runRepo.create({
       automation,
       status: 'running',
@@ -105,11 +173,24 @@ export async function evaluateAutomation(
       executedAt: new Date(),
     });
     await runRepo.save(run);
+
     try {
+      const actionResults: Array<Record<string, unknown> | undefined> = [];
       for (const action of rule.actions) {
-        await runAction(action, { mqttClient, homeId, roomId: automation.scope || triggerContext['roomId'] as string }, dataSource);
+        const result = await runAction(
+          action,
+          {
+            mqttClient,
+            homeId,
+            roomId: (triggerContext['roomId'] as string | undefined) ?? automation.scope,
+            triggerContext,
+          },
+          dataSource,
+        );
+        actionResults.push(result);
       }
       run.status = 'succeeded';
+      run.output = { matched: true, actionResults };
     } catch (err) {
       logger.error({ err }, 'Automation run failed');
       run.status = 'failed';
@@ -118,4 +199,3 @@ export async function evaluateAutomation(
     await runRepo.save(run);
   }
 }
-

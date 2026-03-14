@@ -1,10 +1,14 @@
 import { Router } from 'express';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { Device, Home, Room, User } from '../entities/index.js';
 import { logger } from '../logger.js';
 
 function canManageAllHomes(req: any) {
   return req.auth?.role === 'admin';
+}
+
+function claimedHomeIds(req: any) {
+  return Array.isArray(req.auth?.homeIds) ? req.auth.homeIds.filter(Boolean) : [];
 }
 
 function serializeDevice(device: Device) {
@@ -79,9 +83,14 @@ async function findHomeForRequest(
         owner: true,
       };
 
-  const where = canManageAllHomes(req)
-    ? { id: homeId }
-    : { id: homeId, owner: { id: req.auth?.userId } };
+  let where: any;
+  if (canManageAllHomes(req)) {
+    where = { id: homeId };
+  } else if (claimedHomeIds(req).includes(homeId)) {
+    where = { id: homeId };
+  } else {
+    where = { id: homeId, owner: { id: req.auth?.userId } };
+  }
 
   return homeRepo.findOne({
     where: where as any,
@@ -98,9 +107,28 @@ async function findHomeForRequest(
 
 async function findRoomForRequest(dataSource: DataSource, req: any, roomId: string) {
   const roomRepo = dataSource.getRepository(Room);
-  const where = canManageAllHomes(req)
-    ? { id: roomId }
-    : { id: roomId, home: { owner: { id: req.auth?.userId } } };
+  let where: any;
+  if (canManageAllHomes(req)) {
+    where = { id: roomId };
+  } else {
+    const ownersWhere = req.auth?.userId
+      ? ({ id: roomId, home: { owner: { id: req.auth.userId } } } as any)
+      : null;
+    const homeIds = claimedHomeIds(req);
+    const claimedWhere =
+      homeIds.length > 0
+        ? ({
+            id: roomId,
+            home: { id: In(homeIds) },
+          } as any)
+        : null;
+    where = [ownersWhere, claimedWhere].filter(Boolean) as any;
+    if (where.length === 0) {
+      where = { id: roomId, home: { owner: { id: '__unauthorized__' } } };
+    } else if (where.length === 1) {
+      where = where[0];
+    }
+  }
 
   return roomRepo.findOne({
     where: where as any,
@@ -116,8 +144,25 @@ export function createHomeRoutes(dataSource: DataSource) {
 
   router.get('/homes', async (req, res) => {
     const repo = dataSource.getRepository(Home);
+    let where: any = {};
+    if (!canManageAllHomes(req)) {
+      const candidates: any[] = [];
+      if (req.auth?.userId) {
+        candidates.push({ owner: { id: req.auth.userId } });
+      }
+      const homeIds = claimedHomeIds(req);
+      if (homeIds.length > 0) {
+        candidates.push({ id: In(homeIds) });
+      }
+      if (candidates.length === 0) {
+        where = { id: '__unauthorized__' };
+      } else {
+        where = candidates.length === 1 ? candidates[0] : candidates;
+      }
+    }
+
     const homes = await repo.find({
-      where: canManageAllHomes(req) ? {} : { owner: { id: req.auth?.userId } } as any,
+      where,
       relations: {
         owner: true,
         automations: true,

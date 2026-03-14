@@ -1,5 +1,7 @@
 import type {
+  AuthResponse,
   Automation,
+  AutomationDefinition,
   Device,
   DeviceAttrsSnapshot,
   Home,
@@ -84,13 +86,13 @@ export function fetcherWithFallback<T>(fallback: T) {
 
 export const api = {
   login: (email: string, password: string) =>
-    fetchJson<{ token: string; user: { id: string; email: string; role: string } }>(`/api/auth/login`, {
+    fetchJson<AuthResponse>(`/api/auth/login`, {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
 
   register: (email: string, password: string) =>
-    fetchJson<{ token: string; user: { id: string; email: string; role: string } }>(`/api/auth/register`, {
+    fetchJson<AuthResponse>(`/api/auth/register`, {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
@@ -215,7 +217,7 @@ export const api = {
     body: { homeId: string; roomId: string; method: string; params?: Record<string, unknown> },
     token?: string,
   ) =>
-    fetchJson<{ status: string; cmdId: string }>(
+    fetchJson<{ status: string; cmdId: string; commandStatus?: string }>(
       `/api/devices/${deviceId}/command`,
       {
         method: 'POST',
@@ -235,6 +237,20 @@ export const api = {
       {
         method: 'POST',
         body: JSON.stringify(automation),
+      },
+      token,
+    ),
+
+  createAutomationFromNL: (
+    homeId: string,
+    body: { prompt: string; enabled?: boolean },
+    token?: string,
+  ) =>
+    fetchJson<{ status: string; automation: Automation & { definition: AutomationDefinition } }>(
+      `/api/homes/${homeId}/automations/nl`,
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
       },
       token,
     ),

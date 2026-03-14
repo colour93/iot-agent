@@ -17,6 +17,10 @@ const ObservabilityPage = () => {
   const online = devices.filter((item) => item.status === 'online').length;
   const enabledAutomations = automations.filter((item) => item.enabled).length;
   const commandVolume = summary?.totalCommands ?? 0;
+  const commandSuccessRate = summary?.commandSuccessRate ?? 0;
+  const automationRunCount = summary?.totalAutomationRuns ?? 0;
+  const llmCalls = summary?.totalLlmInvocations ?? 0;
+  const llmFailureRate = summary?.llmFailureRate ?? 0;
   const mqttConnected = mqtt?.connected ?? false;
   const mqttError = mqtt?.lastError || '无';
 
@@ -36,8 +40,10 @@ const ObservabilityPage = () => {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard title="设备在线" value={`${online}/${devices.length || 0}`} desc="当前家庭在线比" />
         <MetricCard title="自动化启用" value={`${enabledAutomations}/${automations.length || 0}`} desc="确定性规则状态" />
-        <MetricCard title="命令总量" value={String(commandVolume)} desc="后端累计命令计数" />
+        <MetricCard title="命令总量" value={String(commandVolume)} desc={`成功率 ${(commandSuccessRate * 100).toFixed(1)}%`} />
         <MetricCard title="MQTT 连接" value={mqttConnected ? '已连接' : '未连接'} desc={`最近错误: ${mqttError}`} />
+        <MetricCard title="自动化执行" value={String(automationRunCount)} desc="累计运行次数" />
+        <MetricCard title="LLM 调用" value={String(llmCalls)} desc={`失败率 ${(llmFailureRate * 100).toFixed(1)}%`} />
       </div>
 
       <Card className="surface-panel">

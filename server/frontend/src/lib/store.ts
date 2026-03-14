@@ -48,12 +48,17 @@ export const useAppStore = create<State & Actions>((set, get) => ({
   setAuth: (token, user) => {
     localStorage.setItem('authToken', token);
     localStorage.setItem('authUser', JSON.stringify(user));
-    set({ token, user });
+    // 切换登录态时清理旧家庭上下文，避免跨账号残留 homeId 导致 403/404。
+    localStorage.removeItem(LAST_HOME_KEY);
+    localStorage.removeItem(LAST_ROOM_KEY);
+    set({ token, user, selectedHome: undefined, selectedRoom: undefined });
   },
 
   logout: () => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('authUser');
+    localStorage.removeItem(LAST_HOME_KEY);
+    localStorage.removeItem(LAST_ROOM_KEY);
     set({
       token: undefined,
       user: undefined,

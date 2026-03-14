@@ -31,6 +31,9 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
 
 export function homeGuard(param: string) {
   return (req: Request, res: Response, next: NextFunction) => {
+    if (req.auth?.role === 'admin') {
+      return next();
+    }
     const value = req.params[param];
     const homeId = Array.isArray(value) ? value[0] : value;
     if (!homeId || !req.auth?.homeIds || !req.auth.homeIds.includes(homeId)) {

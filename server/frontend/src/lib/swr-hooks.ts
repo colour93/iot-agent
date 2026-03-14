@@ -3,6 +3,15 @@ import { api } from './api';
 import { mockAutomations, mockDevices, mockHomes, mockRooms } from './mocks';
 import type { Automation, Device, Home, HomeStructure, MetricsSummary, MqttMetrics, Room } from './types';
 
+function hasAuthSession() {
+  if (typeof window === 'undefined') return false;
+  return Boolean(window.localStorage.getItem('authToken'));
+}
+
+function shouldUseMockFallback() {
+  return !hasAuthSession();
+}
+
 function buildMockStructure(homeId?: string): HomeStructure | null {
   if (!homeId) return null;
 
@@ -35,7 +44,7 @@ function buildMockStructure(homeId?: string): HomeStructure | null {
 }
 
 export function useHomes(enabled = true) {
-  const fallback = mockHomes;
+  const fallback = shouldUseMockFallback() ? mockHomes : [];
   const key = enabled ? '/api/homes' : null;
   return useSWR<Home[]>(
     key,
@@ -44,6 +53,7 @@ export function useHomes(enabled = true) {
         return await api.listHomes();
       } catch (err) {
         console.warn('fetch homes failed, using fallback', err);
+        if (!shouldUseMockFallback()) return [];
         return fallback;
       }
     },
@@ -56,7 +66,7 @@ export function useHomes(enabled = true) {
 }
 
 export function useHomeStructure(homeId?: string) {
-  const fallback = buildMockStructure(homeId);
+  const fallback = shouldUseMockFallback() ? buildMockStructure(homeId) : null;
   const key = homeId ? `/api/homes/${homeId}/structure` : null;
   return useSWR<HomeStructure | null>(
     key,
@@ -66,6 +76,7 @@ export function useHomeStructure(homeId?: string) {
         return await api.getHomeStructure(homeId);
       } catch (err) {
         console.warn('fetch home structure failed, using fallback', err);
+        if (!shouldUseMockFallback()) return null;
         return fallback;
       }
     },
@@ -78,7 +89,7 @@ export function useHomeStructure(homeId?: string) {
 }
 
 export function useRooms(homeId?: string) {
-  const fallback = mockRooms.filter((r) => r.homeId === homeId);
+  const fallback = shouldUseMockFallback() ? mockRooms.filter((r) => r.homeId === homeId) : [];
   const key = homeId ? `/api/homes/${homeId}/rooms` : null;
   return useSWR<Room[]>(
     key,
@@ -88,6 +99,7 @@ export function useRooms(homeId?: string) {
         return await api.listRooms(homeId);
       } catch (err) {
         console.warn('fetch rooms failed, using fallback', err);
+        if (!shouldUseMockFallback()) return [];
         return fallback as Room[];
       }
     },
@@ -100,7 +112,7 @@ export function useRooms(homeId?: string) {
 }
 
 export function useDevices(homeId?: string) {
-  const fallback = mockDevices.filter((d) => d.homeId === homeId);
+  const fallback = shouldUseMockFallback() ? mockDevices.filter((d) => d.homeId === homeId) : [];
   const key = homeId ? `/api/homes/${homeId}/devices` : null;
   return useSWR<Device[]>(
     key,
@@ -110,6 +122,7 @@ export function useDevices(homeId?: string) {
         return await api.listDevices(homeId);
       } catch (err) {
         console.warn('fetch devices failed, using fallback', err);
+        if (!shouldUseMockFallback()) return [];
         return fallback as Device[];
       }
     },
@@ -122,7 +135,7 @@ export function useDevices(homeId?: string) {
 }
 
 export function useAutomations(homeId?: string) {
-  const fallback = mockAutomations.filter((a) => a.homeId === homeId);
+  const fallback = shouldUseMockFallback() ? mockAutomations.filter((a) => a.homeId === homeId) : [];
   const key = homeId ? `/api/homes/${homeId}/automations` : null;
   return useSWR<Automation[]>(
     key,
@@ -132,6 +145,7 @@ export function useAutomations(homeId?: string) {
         return await api.listAutomations(homeId);
       } catch (err) {
         console.warn('fetch automations failed, using fallback', err);
+        if (!shouldUseMockFallback()) return [];
         return fallback as Automation[];
       }
     },

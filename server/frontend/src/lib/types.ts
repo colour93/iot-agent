@@ -4,6 +4,55 @@ export type DeviceCapability = {
   schema?: Record<string, unknown>;
 };
 
+export type AutomationCondition =
+  | {
+      kind: 'attr';
+      deviceId: string;
+      path: string;
+      op: 'gt' | 'gte' | 'lt' | 'lte' | 'eq';
+      value: number | string | boolean;
+    }
+  | {
+      kind: 'event';
+      deviceId: string;
+      eventType: string;
+    }
+  | {
+      kind: 'time';
+      cron: string;
+    }
+  | {
+      kind: 'external';
+      source: 'weather' | 'season';
+      key: string;
+      op: 'gt' | 'gte' | 'lt' | 'lte' | 'eq';
+      value: number | string;
+    };
+
+export type AutomationAction =
+  | {
+      kind: 'command';
+      deviceId: string;
+      method: string;
+      params: Record<string, unknown>;
+    }
+  | {
+      kind: 'notify';
+      channel: 'log';
+      message: string;
+    }
+  | {
+      kind: 'llm';
+      role: 'back';
+      prompt: string;
+    };
+
+export type AutomationDefinition = {
+  conditions: AutomationCondition[];
+  actions: AutomationAction[];
+  [key: string]: unknown;
+};
+
 export type Device = {
   id?: string;
   deviceId: string;
@@ -62,9 +111,9 @@ export type Automation = {
   homeId: string;
   name: string;
   enabled: boolean;
-  definition: Record<string, unknown>;
+  definition: AutomationDefinition;
   scope?: string;
-  source?: 'json' | 'llm';
+  source?: 'json' | 'nl' | 'preset';
 };
 
 export type User = {
@@ -75,12 +124,24 @@ export type User = {
 
 export type AuthResponse = {
   token: string;
+  homeIds: string[];
   user: User;
 };
 
 export type MetricsSummary = {
   onlineDevices: number;
   totalCommands: number;
+  ackedCommands?: number;
+  failedCommands?: number;
+  timeoutCommands?: number;
+  commandSuccessRate?: number;
+  totalAutomationRuns?: number;
+  succeededAutomationRuns?: number;
+  failedAutomationRuns?: number;
+  automationSuccessRate?: number;
+  totalLlmInvocations?: number;
+  failedLlmInvocations?: number;
+  llmFailureRate?: number;
 };
 
 export type MqttMetrics = {

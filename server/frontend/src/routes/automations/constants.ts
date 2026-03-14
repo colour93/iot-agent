@@ -1,4 +1,6 @@
-export const defaultDefinition = {
+import type { AutomationDefinition } from '../../lib/types';
+
+export const defaultDefinition: AutomationDefinition = {
   conditions: [
     {
       kind: 'attr',
@@ -52,7 +54,6 @@ export const presetTemplates = [
           op: 'lt',
           value: 40,
         },
-        { kind: 'context', path: 'time.hour', op: 'gte', value: 22 },
       ],
       actions: [
         {
