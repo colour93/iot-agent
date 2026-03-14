@@ -7,6 +7,8 @@
   - MQTT 双栈兼容（订阅与下发同时支持 `device/...` 与 `home/.../room/.../device/...`）。
   - external 数据联动（天气/季节）：接入 Redis + PostgreSQL 缓存，并注入自动化评估上下文。
   - time/cron 调度：`time` 条件按 cron 真实匹配，新增按分钟自动调度执行。
+  - 固件抽象化：ESP32 固件拆分为传感器/触发器基类与派生实现，替换单文件 demo 结构。
+  - 家庭隔离强化：新增 `GET /api/homes/:homeId/commands`（home 维度过滤），并为 LLM/自动化/命令查询链路补充审计日志。
 
 ### Summary
 - 目标：把“可演示系统”补齐为“需求闭环系统”，优先完成家庭隔离、自动化事件驱动、命令闭环、NL 创建自动化。
@@ -23,6 +25,8 @@
 - MQTT 发布与消费支持双主题体系：`device/{deviceId}/...` 与 `home/{homeId}/room/{roomId}/device/{deviceId}/...`。
 - 自动化评估上下文新增 external 字段：`external.weather.*`、`external.season.*`。
 - 全智能模式新增统一决策结构：`mode + goals + policy + decision`，LLM 仅输出结构化决策（JSON），由策略护栏校验后执行。
+- 新增 `GET /api/homes/:homeId/commands`：按 `homeId` 查询命令历史，支持 `status`/`deviceId`/`limit` 过滤。
+- 查询审计落地：LLM 会话、自动化列表、命令历史查询统一写入 `audit_logs`。
 
 ### TODO（全量，按优先级）
 - [x] P0-01 鉴权闭环：登录注入 `homeIds`，所有 `homes/:homeId/*` 路由统一家庭权限校验。
@@ -36,8 +40,8 @@
 - [x] P1-01 MQTT 主题升级：从 `device/{deviceId}/...` 迁移到 `home/{homeId}/room/{roomId}/device/{deviceId}/...`，双栈兼容一阶段。
 - [x] P1-02 外部数据联动：天气/季节采集与缓存（Redis + PG cache），接入 `external` 条件判定。
 - [x] P1-03 自动化调度：支持 cron/time 条件的真实调度，不仅“time 条件默认 true”。
-- [ ] P1-04 固件抽象化：设备侧建立传感器/触发器基类与派生实现，替换单文件 demo 结构。
-- [ ] P1-05 家庭隔离强化：LLM、自动化、命令查询接口全面按 home 维度过滤和审计。
+- [x] P1-04 固件抽象化：设备侧建立传感器/触发器基类与派生实现，替换单文件 demo 结构。
+- [x] P1-05 家庭隔离强化：LLM、自动化、命令查询接口全面按 home 维度过滤和审计。
 
 - [ ] P2-02 生产安全收敛：`cors` 白名单、强 JWT secret、MQTT ACL/TLS 策略。
 - [ ] P2-03 运维能力：Prometheus 指标规范化、审计日志完善、故障告警阈值配置。

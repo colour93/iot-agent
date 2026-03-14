@@ -2,6 +2,7 @@ import type {
   AuthResponse,
   Automation,
   AutomationDefinition,
+  CommandRecord,
   Device,
   DeviceAttrsSnapshot,
   Home,
@@ -225,6 +226,16 @@ export const api = {
       },
       token,
     ),
+
+  listCommands: (homeId: string, query?: { status?: string; deviceId?: string; limit?: number }, token?: string) => {
+    const params = new URLSearchParams();
+    if (query?.status) params.set('status', query.status);
+    if (query?.deviceId) params.set('deviceId', query.deviceId);
+    if (typeof query?.limit === 'number') params.set('limit', String(query.limit));
+    const suffix = params.toString();
+    const url = `/api/homes/${homeId}/commands${suffix ? `?${suffix}` : ''}`;
+    return fetchJson<{ commands: CommandRecord[]; limit: number }>(url, undefined, token);
+  },
 
   listAutomations: async (homeId: string, token?: string) => {
     const list = await fetchJson<AutomationApiItem[]>(`/api/homes/${homeId}/automations`, undefined, token);

@@ -4,6 +4,7 @@ import { Automation, Home } from '../entities/index.js';
 import { evaluateAutomation } from '../services/automationEngine.js';
 import { generateAutomationFromPrompt } from '../services/automationNlService.js';
 import { automationDefinitionSchema } from '../types/automation.js';
+import { writeAuditLog } from '../services/auditService.js';
 
 async function canAccessHome(dataSource: DataSource, req: any, homeId: string) {
   if (req.auth?.role === 'admin') return true;
@@ -35,6 +36,28 @@ async function findAutomationForRequest(dataSource: DataSource, req: any, automa
   return null;
 }
 
+async function ensureHomeAccess(
+  dataSource: DataSource,
+  req: any,
+  res: any,
+  action: string,
+) {
+  const homeId = req.params.homeId;
+  const allowed = await canAccessHome(dataSource, req, homeId);
+  await writeAuditLog(dataSource, {
+    req,
+    action,
+    target: `home:${homeId}`,
+    homeId,
+    result: allowed ? 'allow' : 'deny',
+  });
+  if (!allowed) {
+    res.status(403).json({ code: 403, msg: 'forbidden' });
+    return false;
+  }
+  return true;
+}
+
 export function createAutomationRoutes(
   dataSource: DataSource,
   mqttClient: import('mqtt').MqttClient,
@@ -42,19 +65,23 @@ export function createAutomationRoutes(
   const router = Router();
 
   router.get('/homes/:homeId/automations', async (req, res) => {
-    if (!(await canAccessHome(dataSource, req, req.params.homeId))) {
-      return res.status(403).json({ code: 403, msg: 'forbidden' });
-    }
+    if (!(await ensureHomeAccess(dataSource, req, res, 'automation.list'))) return;
     const list = await dataSource.getRepository(Automation).find({
       where: { home: { id: req.params.homeId } },
+    });
+    await writeAuditLog(dataSource, {
+      req,
+      action: 'automation.list.result',
+      target: `home:${req.params.homeId}`,
+      homeId: req.params.homeId,
+      result: 'success',
+      meta: { count: list.length },
     });
     res.json(list);
   });
 
   router.post('/homes/:homeId/automations', async (req, res) => {
-    if (!(await canAccessHome(dataSource, req, req.params.homeId))) {
-      return res.status(403).json({ code: 403, msg: 'forbidden' });
-    }
+    if (!(await ensureHomeAccess(dataSource, req, res, 'automation.create'))) return;
 
     if (typeof req.body?.name !== 'string' || !req.body.name.trim()) {
       return res.status(400).json({ code: 400, msg: 'name required' });
@@ -88,9 +115,7 @@ export function createAutomationRoutes(
   });
 
   router.post('/homes/:homeId/automations/nl', async (req, res) => {
-    if (!(await canAccessHome(dataSource, req, req.params.homeId))) {
-      return res.status(403).json({ code: 403, msg: 'forbidden' });
-    }
+    if (!(await ensureHomeAccess(dataSource, req, res, 'automation.create.nl'))) return;
 
     if (typeof req.body?.prompt !== 'string' || !req.body.prompt.trim()) {
       return res.status(400).json({ code: 400, msg: 'prompt required' });

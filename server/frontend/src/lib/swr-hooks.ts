@@ -1,7 +1,7 @@
 import useSWR from 'swr';
 import { api } from './api';
 import { mockAutomations, mockDevices, mockHomes, mockRooms } from './mocks';
-import type { Automation, Device, Home, HomeStructure, MetricsSummary, MqttMetrics, Room } from './types';
+import type { Automation, CommandRecord, Device, Home, HomeStructure, MetricsSummary, MqttMetrics, Room } from './types';
 
 function hasAuthSession() {
   if (typeof window === 'undefined') return false;
@@ -151,6 +151,29 @@ export function useAutomations(homeId?: string) {
     },
     {
       fallbackData: fallback as Automation[],
+      revalidateOnFocus: false,
+      refreshInterval: 5000,
+    },
+  );
+}
+
+export function useCommands(homeId?: string, limit = 20) {
+  const fallback: CommandRecord[] = [];
+  const key = homeId ? `/api/homes/${homeId}/commands?limit=${limit}` : null;
+  return useSWR<CommandRecord[]>(
+    key,
+    async () => {
+      if (!homeId) return fallback;
+      try {
+        const result = await api.listCommands(homeId, { limit });
+        return result.commands;
+      } catch (err) {
+        console.warn('fetch commands failed, using fallback', err);
+        return fallback;
+      }
+    },
+    {
+      fallbackData: fallback,
       revalidateOnFocus: false,
       refreshInterval: 5000,
     },

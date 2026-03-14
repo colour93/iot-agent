@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <PsychicMqttClient.h>
 #include <ArduinoJson.h>
+#include "device_components.h"
 #include "../include/consts.h"
 
 // ====== 日志封装 ======
@@ -15,6 +16,13 @@ PsychicMqttClient mqttClient;
 String baseTopic;
 unsigned long lastTelemetryMs = 0;
 unsigned long lastHeartbeatMs = 0;
+TemperatureSensor temperatureSensor;
+HumiditySensor humiditySensor;
+LedTrigger ledTrigger;
+SensorBase *sensors[] = {&temperatureSensor, &humiditySensor};
+TriggerBase *triggers[] = {&ledTrigger};
+constexpr size_t SENSOR_COUNT = sizeof(sensors) / sizeof(sensors[0]);
+constexpr size_t TRIGGER_COUNT = sizeof(triggers) / sizeof(triggers[0]);
 
 // ====== 工具函数 ======
 String buildTopic(const String &suffix) { return baseTopic + "/" + suffix; }
@@ -43,20 +51,14 @@ void publishRegister()
   doc["fw"] = "1.0.0";
 
   JsonArray caps = doc.createNestedArray("capabilities");
-  JsonObject capTemp = caps.createNestedObject();
-  capTemp["kind"] = "attr";
-  capTemp["name"] = "temperature";
-  capTemp["schema"]["type"] = "number";
-
-  JsonObject capHum = caps.createNestedObject();
-  capHum["kind"] = "attr";
-  capHum["name"] = "humidity";
-  capHum["schema"]["type"] = "number";
-
-  JsonObject capMethod = caps.createNestedObject();
-  capMethod["kind"] = "method";
-  capMethod["name"] = "set_led";
-  capMethod["schema"]["type"] = "object";
+  for (size_t i = 0; i < SENSOR_COUNT; i++)
+  {
+    sensors[i]->appendCapability(caps);
+  }
+  for (size_t i = 0; i < TRIGGER_COUNT; i++)
+  {
+    triggers[i]->appendCapability(caps);
+  }
 
   char buffer[512];
   size_t len = serializeJson(doc, buffer);
@@ -78,13 +80,13 @@ void publishHeartbeat()
 
 void publishTelemetry()
 {
-  float temperature = 22.0 + ((float)random(0, 100) / 100.0); // 示例数据
-  float humidity = 55.0 + ((float)random(0, 100) / 100.0);
-
   StaticJsonDocument<256> doc;
   doc["ts"] = (long)(millis() / 1000);
-  doc["attrs"]["temperature"] = temperature;
-  doc["attrs"]["humidity"] = humidity;
+  JsonObject attrs = doc["attrs"].to<JsonObject>();
+  for (size_t i = 0; i < SENSOR_COUNT; i++)
+  {
+    sensors[i]->appendTelemetry(attrs);
+  }
 
   char buffer[256];
   size_t len = serializeJson(doc, buffer);
@@ -93,7 +95,7 @@ void publishTelemetry()
 
 void handleCommand(const String &topic, const String &payload)
 {
-  StaticJsonDocument<256> doc;
+  StaticJsonDocument<512> doc;
   if (deserializeJson(doc, payload))
   {
     logWarn("Invalid command json");
@@ -101,19 +103,39 @@ void handleCommand(const String &topic, const String &payload)
   }
   const char *cmdId = doc["cmdId"] | "unknown";
   const char *method = doc["method"] | "noop";
+  JsonVariantConst params = doc["params"].as<JsonVariantConst>();
 
   logInfo(String("CMD ") + cmdId + ": " + method);
-  // 示例：set_led 方法
-  String status = "ok";
-  if (String(method) == "set_led")
+  bool handled = false;
+  bool success = false;
+  for (size_t i = 0; i < TRIGGER_COUNT; i++)
   {
-    // 此处可操作 GPIO
-    logDebug("Setting LED (simulated)");
+    if (String(method) == String(triggers[i]->methodName()))
+    {
+      handled = true;
+      success = triggers[i]->execute(params);
+      break;
+    }
+  }
+  String status = "ok";
+  if (!handled)
+  {
+    status = "unsupported_method";
+    logWarn(String("Unsupported method: ") + method);
+  }
+  else if (!success)
+  {
+    status = "failed";
+    logWarn(String("Command execute failed: ") + method);
   }
 
   StaticJsonDocument<256> ack;
   ack["cmdId"] = cmdId;
   ack["status"] = status;
+  if (status != "ok")
+  {
+    ack["error"] = status;
+  }
   char buffer[256];
   size_t len = serializeJson(ack, buffer);
   mqttClient.publish(buildTopic("command/ack").c_str(), 1, false, buffer, len);

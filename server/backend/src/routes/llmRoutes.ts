@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { MqttClient } from 'mqtt';
 import { Home } from '../entities/index.js';
 import { logger } from '../logger.js';
+import { writeAuditLog } from '../services/auditService.js';
 import {
   createChatSession,
   deleteChatSession,
@@ -26,22 +27,40 @@ async function canAccessHome(dataSource: DataSource, req: any, homeId: string) {
   return !!home;
 }
 
+async function ensureHomeAccess(
+  dataSource: DataSource,
+  req: any,
+  res: any,
+  action: string,
+) {
+  const homeId = req.params.homeId;
+  const allowed = await canAccessHome(dataSource, req, homeId);
+  await writeAuditLog(dataSource, {
+    req,
+    action,
+    target: `home:${homeId}`,
+    homeId,
+    result: allowed ? 'allow' : 'deny',
+  });
+  if (!allowed) {
+    res.status(403).json({ code: 403, msg: 'forbidden' });
+    return false;
+  }
+  return true;
+}
+
 export function createLlmRoutes(dataSource: DataSource, mqttClient: MqttClient) {
   const router = Router();
 
   router.get('/homes/:homeId/llm/chat/sessions', async (req, res) => {
-    if (!(await canAccessHome(dataSource, req, req.params.homeId))) {
-      return res.status(403).json({ code: 403, msg: 'forbidden' });
-    }
+    if (!(await ensureHomeAccess(dataSource, req, res, 'llm.chat.sessions.list'))) return;
 
     const sessions = await listChatSessions(dataSource, req.params.homeId);
     res.json({ sessions });
   });
 
   router.post('/homes/:homeId/llm/chat/sessions', async (req, res) => {
-    if (!(await canAccessHome(dataSource, req, req.params.homeId))) {
-      return res.status(403).json({ code: 403, msg: 'forbidden' });
-    }
+    if (!(await ensureHomeAccess(dataSource, req, res, 'llm.chat.sessions.create'))) return;
 
     const session = await createChatSession(dataSource, {
       homeId: req.params.homeId,
@@ -51,9 +70,7 @@ export function createLlmRoutes(dataSource: DataSource, mqttClient: MqttClient) 
   });
 
   router.get('/homes/:homeId/llm/chat/sessions/:sessionId', async (req, res) => {
-    if (!(await canAccessHome(dataSource, req, req.params.homeId))) {
-      return res.status(403).json({ code: 403, msg: 'forbidden' });
-    }
+    if (!(await ensureHomeAccess(dataSource, req, res, 'llm.chat.sessions.get'))) return;
 
     const detail = await getChatSessionWithMessages(
       dataSource,
@@ -68,9 +85,7 @@ export function createLlmRoutes(dataSource: DataSource, mqttClient: MqttClient) 
   });
 
   router.put('/homes/:homeId/llm/chat/sessions/:sessionId/messages', async (req, res) => {
-    if (!(await canAccessHome(dataSource, req, req.params.homeId))) {
-      return res.status(403).json({ code: 403, msg: 'forbidden' });
-    }
+    if (!(await ensureHomeAccess(dataSource, req, res, 'llm.chat.sessions.replace_messages'))) return;
 
     if (!Array.isArray(req.body?.messages)) {
       return res.status(400).json({ code: 400, msg: 'messages must be array' });
@@ -95,9 +110,7 @@ export function createLlmRoutes(dataSource: DataSource, mqttClient: MqttClient) 
   });
 
   router.patch('/homes/:homeId/llm/chat/sessions/:sessionId', async (req, res) => {
-    if (!(await canAccessHome(dataSource, req, req.params.homeId))) {
-      return res.status(403).json({ code: 403, msg: 'forbidden' });
-    }
+    if (!(await ensureHomeAccess(dataSource, req, res, 'llm.chat.sessions.rename'))) return;
 
     if (typeof req.body?.title !== 'string') {
       return res.status(400).json({ code: 400, msg: 'title required' });
@@ -122,9 +135,7 @@ export function createLlmRoutes(dataSource: DataSource, mqttClient: MqttClient) 
   });
 
   router.delete('/homes/:homeId/llm/chat/sessions/:sessionId', async (req, res) => {
-    if (!(await canAccessHome(dataSource, req, req.params.homeId))) {
-      return res.status(403).json({ code: 403, msg: 'forbidden' });
-    }
+    if (!(await ensureHomeAccess(dataSource, req, res, 'llm.chat.sessions.delete'))) return;
 
     const deleted = await deleteChatSession(dataSource, req.params.homeId, req.params.sessionId);
     if (!deleted) {
@@ -135,9 +146,7 @@ export function createLlmRoutes(dataSource: DataSource, mqttClient: MqttClient) 
   });
 
   router.post('/homes/:homeId/llm/front', async (req, res) => {
-    if (!(await canAccessHome(dataSource, req, req.params.homeId))) {
-      return res.status(403).json({ code: 403, msg: 'forbidden' });
-    }
+    if (!(await ensureHomeAccess(dataSource, req, res, 'llm.front.invoke'))) return;
 
     const { prompt, context } = req.body;
     if (typeof prompt !== 'string' || !prompt.trim()) {
@@ -149,9 +158,7 @@ export function createLlmRoutes(dataSource: DataSource, mqttClient: MqttClient) 
   });
 
   router.post('/homes/:homeId/llm/back', async (req, res) => {
-    if (!(await canAccessHome(dataSource, req, req.params.homeId))) {
-      return res.status(403).json({ code: 403, msg: 'forbidden' });
-    }
+    if (!(await ensureHomeAccess(dataSource, req, res, 'llm.back.invoke'))) return;
 
     const { prompt, context } = req.body;
     if (typeof prompt !== 'string' || !prompt.trim()) {
@@ -163,9 +170,7 @@ export function createLlmRoutes(dataSource: DataSource, mqttClient: MqttClient) 
   });
 
   router.post('/homes/:homeId/llm/chat', async (req, res) => {
-    if (!(await canAccessHome(dataSource, req, req.params.homeId))) {
-      return res.status(403).json({ code: 403, msg: 'forbidden' });
-    }
+    if (!(await ensureHomeAccess(dataSource, req, res, 'llm.chat.invoke'))) return;
 
     const { messages = [] } = req.body;
     if (!Array.isArray(messages)) {
@@ -176,9 +181,7 @@ export function createLlmRoutes(dataSource: DataSource, mqttClient: MqttClient) 
   });
 
   router.post('/homes/:homeId/llm/chat/stream', async (req, res) => {
-    if (!(await canAccessHome(dataSource, req, req.params.homeId))) {
-      return res.status(403).json({ code: 403, msg: 'forbidden' });
-    }
+    if (!(await ensureHomeAccess(dataSource, req, res, 'llm.chat.stream'))) return;
 
     const { messages = [], id } = req.body ?? {};
     if (!Array.isArray(messages)) {

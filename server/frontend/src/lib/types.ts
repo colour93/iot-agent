@@ -148,3 +148,21 @@ export type MqttMetrics = {
   connected: boolean;
   lastError?: string | null;
 };
+
+export type CommandRecord = {
+  id: string;
+  cmdId: string;
+  homeId: string | null;
+  roomId: string | null;
+  deviceId: string | null;
+  method: string;
+  params: Record<string, unknown>;
+  status: 'pending' | 'sent' | 'acked' | 'failed' | 'timeout';
+  retryCount: number;
+  error: string | null;
+  result: Record<string, unknown> | null;
+  sentAt: string | null;
+  ackAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};

@@ -1,7 +1,7 @@
 import { createRoute } from '@tanstack/react-router';
 import { Route as RootRoute } from '../__root';
 import { useAppStore } from '../../lib/store';
-import { useAutomations, useDevices, useMetricsSummary, useMqttMetrics } from '../../lib/swr-hooks';
+import { useAutomations, useCommands, useDevices, useMetricsSummary, useMqttMetrics } from '../../lib/swr-hooks';
 import { Card, CardContent, CardHeader } from '../../components/ui/card';
 import { Table, TBody, TD, TH, THead, TR } from '../../components/ui/table';
 import { Alert } from '../../components/ui/alert';
@@ -11,6 +11,7 @@ const ObservabilityPage = () => {
   const selectedHome = useAppStore((s) => s.selectedHome);
   const { data: devices = [] } = useDevices(selectedHome);
   const { data: automations = [] } = useAutomations(selectedHome);
+  const { data: commands = [] } = useCommands(selectedHome, 15);
   const { data: summary } = useMetricsSummary();
   const { data: mqtt } = useMqttMetrics();
 
@@ -104,6 +105,55 @@ const ObservabilityPage = () => {
             </div>
           ))}
           {automations.length === 0 && <div className="text-xs text-muted-foreground">暂无自动化规则。</div>}
+        </CardContent>
+      </Card>
+
+      <Card className="surface-panel">
+        <CardHeader className="text-sm font-semibold">命令历史（当前家庭）</CardHeader>
+        <CardContent>
+          {commands.length === 0 ? (
+            <div className="text-xs text-muted-foreground">暂无命令记录。</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table className="min-w-[680px]">
+                <THead>
+                  <TR>
+                    <TH>命令</TH>
+                    <TH>设备</TH>
+                    <TH>状态</TH>
+                    <TH>重试</TH>
+                    <TH>时间</TH>
+                  </TR>
+                </THead>
+                <TBody>
+                  {commands.map((command) => (
+                    <TR key={command.id}>
+                      <TD>
+                        <div className="font-medium">{command.method}</div>
+                        <div className="text-xs text-muted-foreground">{command.cmdId}</div>
+                      </TD>
+                      <TD>{command.deviceId || '-'}</TD>
+                      <TD
+                        className={
+                          command.status === 'acked'
+                            ? 'text-emerald-700'
+                            : command.status === 'failed' || command.status === 'timeout'
+                              ? 'text-rose-700'
+                              : 'text-slate-600'
+                        }
+                      >
+                        {command.status}
+                      </TD>
+                      <TD>{command.retryCount}</TD>
+                      <TD className="text-xs text-muted-foreground">
+                        {command.createdAt ? new Date(command.createdAt).toLocaleString() : '-'}
+                      </TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

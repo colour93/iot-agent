@@ -4,6 +4,7 @@ import { Command, Device, DeviceAttrsSnapshot, Home, Room } from '../entities/in
 import { sendCommand } from '../services/mqttService.js';
 import { nanoid } from 'nanoid';
 import { logger } from '../logger.js';
+import { writeAuditLog } from '../services/auditService.js';
 
 function canManageAllHomes(req: any) {
   return req.auth?.role === 'admin';
@@ -28,6 +29,59 @@ async function canAccessHome(dataSource: DataSource, req: any, homeId: string) {
 
 function isDeviceCategory(value: unknown): value is 'sensor' | 'actuator' | 'both' {
   return value === 'sensor' || value === 'actuator' || value === 'both';
+}
+
+function isCommandStatus(value: unknown): value is Command['status'] {
+  return value === 'pending' || value === 'sent' || value === 'acked' || value === 'failed' || value === 'timeout';
+}
+
+function firstQueryString(value: unknown) {
+  if (Array.isArray(value)) {
+    return typeof value[0] === 'string' ? value[0].trim() : '';
+  }
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function serializeCommandRecord(command: Command) {
+  return {
+    id: command.id,
+    cmdId: command.cmdId,
+    homeId: command.homeId ?? null,
+    roomId: command.roomId ?? null,
+    deviceId: command.device?.deviceId ?? null,
+    method: command.method,
+    params: command.params ?? {},
+    status: command.status,
+    retryCount: command.retryCount ?? 0,
+    error: command.error ?? null,
+    result: command.result ?? null,
+    sentAt: command.sentAt?.toISOString() ?? null,
+    ackAt: command.ackAt?.toISOString() ?? null,
+    createdAt: command.createdAt.toISOString(),
+    updatedAt: command.updatedAt.toISOString(),
+  };
+}
+
+async function ensureHomeAccess(
+  dataSource: DataSource,
+  req: any,
+  res: any,
+  action: string,
+) {
+  const homeId = req.params.homeId;
+  const allowed = await canAccessHome(dataSource, req, homeId);
+  await writeAuditLog(dataSource, {
+    req,
+    action,
+    target: `home:${homeId}`,
+    homeId,
+    result: allowed ? 'allow' : 'deny',
+  });
+  if (!allowed) {
+    res.status(403).json({ code: 403, msg: 'forbidden' });
+    return false;
+  }
+  return true;
 }
 
 function serializeDevice(device: Device) {
@@ -185,6 +239,53 @@ export function createDeviceRoutes(dataSource: DataSource, mqttClient: import('m
       homeId,
       roomId,
       device: serializeDevice(device),
+    });
+  });
+
+  router.get('/homes/:homeId/commands', async (req, res) => {
+    if (!(await ensureHomeAccess(dataSource, req, res, 'command.list'))) return;
+
+    const status = firstQueryString(req.query.status);
+    if (status && !isCommandStatus(status)) {
+      return res.status(400).json({ code: 400, msg: 'invalid command status' });
+    }
+    const deviceId = firstQueryString(req.query.deviceId);
+    const limitRaw = Number(firstQueryString(req.query.limit) || 30);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.floor(limitRaw), 1), 100) : 30;
+
+    const where: any = { homeId: req.params.homeId };
+    if (status) {
+      where.status = status;
+    }
+    if (deviceId) {
+      where.device = { deviceId };
+    }
+
+    const commands = await dataSource.getRepository(Command).find({
+      where,
+      order: {
+        createdAt: 'DESC',
+      },
+      take: limit,
+    });
+
+    await writeAuditLog(dataSource, {
+      req,
+      action: 'command.list.result',
+      target: `home:${req.params.homeId}`,
+      homeId: req.params.homeId,
+      result: 'success',
+      meta: {
+        count: commands.length,
+        limit,
+        status: status || null,
+        deviceId: deviceId || null,
+      },
+    });
+
+    res.json({
+      commands: commands.map(serializeCommandRecord),
+      limit,
     });
   });
 
