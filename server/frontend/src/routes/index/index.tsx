@@ -259,7 +259,6 @@ const Dashboard = () => {
             <Card className="surface-panel">
               <CardHeader className="space-y-1.5">
                 <div className="text-sm font-semibold">家庭选择</div>
-                <div className="text-xs text-muted-foreground">下拉切换当前家庭，操作记录会保存在本地。</div>
               </CardHeader>
               <CardContent className="space-y-3">
                 {homes.length > 0 ? (
@@ -365,7 +364,6 @@ const Dashboard = () => {
                     <div>
                       <p className="section-eyebrow">当前家庭</p>
                       <h3 className="mt-1 text-2xl font-semibold">{currentHome.name}</h3>
-                      <p className="mt-2 text-sm text-muted-foreground">家庭是房间、设备、自动化和对话上下文的根节点。</p>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                       <MetricTile label="房间" value={String(currentHome.roomsCount ?? rooms.length)} hint="当前家庭的空间数量" />
@@ -393,7 +391,6 @@ const Dashboard = () => {
                     <CardHeader className="flex items-center justify-between gap-2">
                       <div>
                         <div className="text-sm font-semibold">房间管理</div>
-                        <div className="mt-1 text-xs text-muted-foreground">默认自动选中第一个房间，编辑在弹窗中进行。</div>
                       </div>
                       <Button size="sm" variant="outline" onClick={openCreateRoomModal}>
                         添加房间
@@ -417,21 +414,6 @@ const Dashboard = () => {
                           })();
                         }}
                       />
-
-                      {currentRoom ? (
-                        <div className="inset-panel rounded-[1rem] p-4">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                              <div className="text-sm font-semibold">{currentRoom.name}</div>
-                              <div className="mt-1 text-xs text-muted-foreground">
-                                {currentRoom.devicesCount ?? 0} 台设备 · {currentRoom.onlineDevicesCount ?? 0} 台在线
-                              </div>
-                            </div>
-                            <span className="data-pill">当前 Tab</span>
-                          </div>
-                          <p className="mt-2 text-xs text-muted-foreground">房间编辑与删除入口已并入 Tab 右侧图标按钮。</p>
-                        </div>
-                      ) : null}
                     </CardContent>
                   </Card>
 
@@ -439,9 +421,6 @@ const Dashboard = () => {
                     <CardHeader className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <div className="text-sm font-semibold">当前房间设备</div>
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          {currentRoom ? `所有设备和命令都绑定到 ${currentRoom.name}。` : '先选择一个房间。'}
-                        </div>
                       </div>
                       {currentRoom ? (
                         <Button size="sm" variant="outline" onClick={openCreateDeviceModal}>

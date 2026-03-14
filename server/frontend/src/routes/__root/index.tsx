@@ -61,7 +61,7 @@ const Shell = () => {
                   <span className="inline-flex h-8 shrink-0 items-center rounded-full border border-primary/14 bg-primary/6 px-3 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-primary">
                     IoT Agent
                   </span>
-                  <div className="min-w-0">
+                  <div className="flex gap-2 items-center">
                     <p className="text-sm font-semibold sm:text-base">家庭控制台</p>
                     <p className="truncate text-xs text-muted-foreground sm:text-sm">
                       {token ? `当前空间：${contextLabel}` : '登录后开始管理家庭、房间与设备'}
