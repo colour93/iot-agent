@@ -185,6 +185,15 @@ export function createHomeRoutes(dataSource: DataSource) {
     res.json(serializeHome(refreshed ?? home));
   });
 
+  router.delete('/homes/:homeId', async (req, res) => {
+    const home = await findHomeForRequest(dataSource, req, req.params.homeId);
+    if (!home) return res.status(404).json({ code: 404, msg: 'home not found' });
+
+    await dataSource.getRepository(Home).remove(home);
+    logger.debug({ homeId: home.id }, 'home deleted');
+    res.json({ status: 'ok', homeId: home.id });
+  });
+
   router.get('/homes/:homeId/structure', async (req, res) => {
     const home = await findHomeForRequest(dataSource, req, req.params.homeId, true);
     if (!home) return res.status(404).json({ code: 404, msg: 'home not found' });
@@ -248,6 +257,15 @@ export function createHomeRoutes(dataSource: DataSource) {
 
     const refreshed = await findRoomForRequest(dataSource, req, room.id);
     res.json(serializeRoom(refreshed ?? room));
+  });
+
+  router.delete('/rooms/:roomId', async (req, res) => {
+    const room = await findRoomForRequest(dataSource, req, req.params.roomId);
+    if (!room) return res.status(404).json({ code: 404, msg: 'room not found' });
+
+    await dataSource.getRepository(Room).remove(room);
+    logger.debug({ roomId: room.id, homeId: room.home?.id }, 'room deleted');
+    res.json({ status: 'ok', roomId: room.id });
   });
 
   return router;

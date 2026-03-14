@@ -7,6 +7,7 @@ import {
   type UIMessage,
 } from "ai";
 import { createRoute } from "@tanstack/react-router";
+import { ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -15,6 +16,7 @@ import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader } from "../components/ui/card";
 import { useHomes } from "../lib/swr-hooks";
 import { useAppStore } from "../lib/store";
+import { cn } from "../lib/utils";
 import { Route as RootRoute } from "./__root";
 
 const quickPrompts = [
@@ -93,6 +95,15 @@ function formatToolState(state: string) {
     default:
       return state;
   }
+}
+
+function isSettledToolState(state: string) {
+  return (
+    state === "output-available" ||
+    state === "output-error" ||
+    state === "output-denied" ||
+    state === "approval-responded"
+  );
 }
 
 type DeviceStatusData = {
@@ -350,9 +361,17 @@ function RoomSummaryCard({ room }: { room: RoomSummaryData }) {
 }
 
 function ToolPartCard({ part }: { part: UIMessage["parts"][number] }) {
-  if (!isToolUIPart(part)) return null;
-
   const toolName = getToolName(part);
+  const [collapsed, setCollapsed] = useState(() =>
+    isSettledToolState(part.state),
+  );
+  const hasUserToggled = useRef(false);
+
+  useEffect(() => {
+    if (hasUserToggled.current) return;
+    setCollapsed(isSettledToolState(part.state));
+  }, [part.state]);
+
   const devices =
     part.state === "output-available"
       ? extractDeviceStatusCards(toolName, part.output)
@@ -362,65 +381,96 @@ function ToolPartCard({ part }: { part: UIMessage["parts"][number] }) {
       ? extractRoomCards(toolName, part.output)
       : [];
 
+  const toggleCollapsed = () => {
+    hasUserToggled.current = true;
+    setCollapsed((prev) => !prev);
+  };
+  if (!isToolUIPart(part)) return null;
+
   return (
-    <Card className="inset-panel w-fit max-w-full rounded-2xl border-border/65 bg-card/88">
-      <CardHeader className="pb-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs font-semibold tracking-wide text-foreground">
-            工具调用: {toolName}
-          </p>
-          <span className="data-pill py-0.5 text-[11px]">
-            {formatToolState(part.state)}
-          </span>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-2 pt-0">
-        {part.state === "input-streaming" ? (
-          <div className="text-xs text-muted-foreground">正在生成工具参数...</div>
-        ) : null}
-
-        {part.state === "input-available" ? (
-          <pre className="overflow-x-auto rounded-md border border-border/70 bg-background/90 p-2 text-xs">
-            {toJson(part.input)}
-          </pre>
-        ) : null}
-
-        {part.state === "output-error" ? (
-          <Alert variant="destructive" className="text-xs">
-            {part.errorText}
-          </Alert>
-        ) : null}
-
-        {part.state === "output-denied" ? (
-          <Alert className="text-xs">该工具调用被拒绝，未执行。</Alert>
-        ) : null}
-
-        {part.state === "output-available" ? (
-          <>
-            {devices.length > 0 ? (
-              <div className="space-y-2">
-                {devices.map((device) => (
-                  <DeviceStatusCard
-                    key={`${toolName}-${device.deviceId}`}
-                    device={device}
-                  />
-                ))}
+    <div className="max-w-full">
+      <button
+        type="button"
+        onClick={toggleCollapsed}
+        aria-expanded={!collapsed}
+        className="group inline-flex max-w-full items-center gap-1 rounded-md text-left transition-colors duration-200 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+      >
+        <ChevronRight
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
+            collapsed ? "rotate-0" : "rotate-90",
+          )}
+        />
+        <span className="text-xs font-semibold tracking-wide text-foreground">
+          工具调用: {toolName}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          · {formatToolState(part.state)}
+        </span>
+      </button>
+      <div
+        className={cn(
+          "grid transition-[grid-template-rows,opacity] duration-200 ease-out",
+          collapsed
+            ? "grid-rows-[0fr] opacity-0"
+            : "grid-rows-[1fr] opacity-100",
+        )}
+      >
+        <div className="min-h-0 overflow-hidden pl-2 pt-1">
+          <div className="space-y-2">
+            {part.state === "input-streaming" ? (
+              <div className="text-xs text-muted-foreground">
+                正在生成工具参数...
               </div>
-            ) : rooms.length > 0 ? (
-              <div className="space-y-2">
-                {rooms.map((room) => (
-                  <RoomSummaryCard key={`${toolName}-${room.roomId}`} room={room} />
-                ))}
-              </div>
-            ) : (
+            ) : null}
+
+            {part.state === "input-available" ? (
               <pre className="overflow-x-auto rounded-md border border-border/70 bg-background/90 p-2 text-xs">
-                {toJson(part.output)}
+                {toJson(part.input)}
               </pre>
-            )}
-          </>
-        ) : null}
-      </CardContent>
-    </Card>
+            ) : null}
+
+            {part.state === "output-error" ? (
+              <Alert variant="destructive" className="text-xs">
+                {part.errorText}
+              </Alert>
+            ) : null}
+
+            {part.state === "output-denied" ? (
+              <Alert className="text-xs">该工具调用被拒绝，未执行。</Alert>
+            ) : null}
+
+            {part.state === "output-available" ? (
+              <>
+                {devices.length > 0 ? (
+                  <div className="space-y-2">
+                    {devices.map((device) => (
+                      <DeviceStatusCard
+                        key={`${toolName}-${device.deviceId}`}
+                        device={device}
+                      />
+                    ))}
+                  </div>
+                ) : rooms.length > 0 ? (
+                  <div className="space-y-2">
+                    {rooms.map((room) => (
+                      <RoomSummaryCard
+                        key={`${toolName}-${room.roomId}`}
+                        room={room}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <pre className="overflow-x-auto rounded-md border border-border/70 bg-background/90 p-2 text-xs">
+                    {toJson(part.output)}
+                  </pre>
+                )}
+              </>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -469,26 +519,40 @@ function ChatSession({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      {error ? <Alert variant="destructive">{error.message || "请求失败，请稍后重试。"}</Alert> : null}
+      {error ? (
+        <Alert variant="destructive">
+          {error.message || "请求失败，请稍后重试。"}
+        </Alert>
+      ) : null}
 
       <section className="surface-panel flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.25rem]">
-        <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-4 sm:px-5">
+        <div
+          ref={listRef}
+          className="min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-4 sm:px-5"
+        >
           {messages.length === 0 ? (
             <div className="grid min-h-full place-items-center py-8">
               <div className="inset-panel relative w-full max-w-3xl overflow-hidden rounded-[1.25rem] p-5 sm:p-6">
                 <div className="ambient-orb -right-20 -top-16 bg-[oklch(0.73_0.08_214_/_24%)]" />
                 <div className="relative">
                   <p className="section-eyebrow">对话助手</p>
-                  <h2 className="mt-1 text-2xl font-semibold">家庭上下文对话</h2>
+                  <h2 className="mt-1 text-2xl font-semibold">
+                    家庭上下文对话
+                  </h2>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    基于 AI SDK 流式响应，支持工具调用与设备控制。输入自然语言即可主动查询设备、房间与状态。
+                    基于 AI SDK
+                    流式响应，支持工具调用与设备控制。输入自然语言即可主动查询设备、房间与状态。
                   </p>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className="data-pill">当前家庭: {homeName || homeId}</span>
+                    <span className="data-pill">
+                      当前家庭: {homeName || homeId}
+                    </span>
                     {/* <span className="data-pill">已准备 {quickPrompts.length} 个示例问题</span> */}
                   </div>
                   <div className="mt-5">
-                    <p className="text-xs font-semibold tracking-wide text-muted-foreground">试试这些问题</p>
+                    <p className="text-xs font-semibold tracking-wide text-muted-foreground">
+                      试试这些问题
+                    </p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {quickPrompts.map((prompt) => (
                         <PromptChip
@@ -522,7 +586,7 @@ function ChatSession({
                     <div className="mb-1 text-[10px] uppercase tracking-wide opacity-70">
                       {message.role === "user" ? "你" : "助手"}
                     </div>
-                    <div className="flex flex-col items-start gap-2">
+                    <div className="flex flex-col items-start gap-1">
                       {message.parts.map((part, idx) => {
                         const key = `${message.id}-${idx}`;
 
@@ -585,7 +649,9 @@ function ChatSession({
                 </div>
               ))}
               {sending ? (
-                <div className="status-live text-xs text-muted-foreground">模型正在思考...</div>
+                <div className="status-live text-xs text-muted-foreground">
+                  模型正在思考...
+                </div>
               ) : null}
             </>
           )}
@@ -605,7 +671,9 @@ function ChatSession({
             }}
           />
           <div className="mt-2 flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground">Enter 发送，Shift + Enter 换行</span>
+            <span className="text-xs text-muted-foreground">
+              Enter 发送，Shift + Enter 换行
+            </span>
             <Button
               disabled={!input.trim() || sending}
               onClick={async () => {

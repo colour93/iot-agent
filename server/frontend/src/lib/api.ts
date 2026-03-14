@@ -10,6 +10,12 @@ import type {
 } from './types';
 import { toast } from 'sonner';
 
+type AutomationApiItem = Omit<Automation, 'homeId'> & {
+  home?: {
+    id?: string;
+  };
+};
+
 function buildHeaders(token?: string, extra?: Record<string, string>) {
   return {
     'Content-Type': 'application/json',
@@ -97,6 +103,15 @@ export const api = {
       token,
     ),
 
+  deleteHome: (homeId: string, token?: string) =>
+    fetchJson<{ status: string; homeId: string }>(
+      `/api/homes/${homeId}`,
+      {
+        method: 'DELETE',
+      },
+      token,
+    ),
+
   listRooms: (homeId: string, token?: string) => fetchJson<Room[]>(`/api/homes/${homeId}/rooms`, undefined, token),
 
   createRoom: (homeId: string, data: { name: string; floor?: string; type?: string }, token?: string) =>
@@ -119,6 +134,15 @@ export const api = {
       token,
     ),
 
+  deleteRoom: (roomId: string, token?: string) =>
+    fetchJson<{ status: string; roomId: string }>(
+      `/api/rooms/${roomId}`,
+      {
+        method: 'DELETE',
+      },
+      token,
+    ),
+
   listDevices: (homeId: string, token?: string) => fetchJson<Device[]>(`/api/homes/${homeId}/devices`, undefined, token),
 
   preRegisterDevice: (
@@ -136,6 +160,35 @@ export const api = {
     ),
 
   getDevice: (deviceId: string, token?: string) => fetchJson<Device>(`/api/devices/${deviceId}`, undefined, token),
+
+  updateDevice: (
+    deviceId: string,
+    data: {
+      homeId?: string;
+      roomId?: string;
+      name?: string;
+      type?: string;
+      category?: 'sensor' | 'actuator' | 'both';
+    },
+    token?: string,
+  ) =>
+    fetchJson<Device>(
+      `/api/devices/${deviceId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      },
+      token,
+    ),
+
+  deleteDevice: (deviceId: string, token?: string) =>
+    fetchJson<{ status: string; deviceId: string }>(
+      `/api/devices/${deviceId}`,
+      {
+        method: 'DELETE',
+      },
+      token,
+    ),
 
   getDeviceAttrs: (deviceId: string, token?: string) =>
     fetchJson<DeviceAttrsSnapshot>(`/api/devices/${deviceId}/attrs`, undefined, token),
@@ -155,8 +208,8 @@ export const api = {
     ),
 
   listAutomations: async (homeId: string, token?: string) => {
-    const list = await fetchJson<any[]>(`/api/homes/${homeId}/automations`, undefined, token);
-    return list.map((a) => ({ ...a, homeId: a.home?.id })) as Automation[];
+    const list = await fetchJson<AutomationApiItem[]>(`/api/homes/${homeId}/automations`, undefined, token);
+    return list.map((item) => ({ ...item, homeId: item.home?.id || homeId })) as Automation[];
   },
 
   saveAutomation: (homeId: string, automation: Partial<Automation>, token?: string) =>

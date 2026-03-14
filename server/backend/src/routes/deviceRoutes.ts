@@ -9,6 +9,10 @@ function canManageAllHomes(req: any) {
   return req.auth?.role === 'admin';
 }
 
+function isDeviceCategory(value: unknown): value is 'sensor' | 'actuator' | 'both' {
+  return value === 'sensor' || value === 'actuator' || value === 'both';
+}
+
 function serializeDevice(device: Device) {
   return {
     id: device.id,
@@ -117,6 +121,40 @@ export function createDeviceRoutes(dataSource: DataSource, mqttClient: import('m
     res.json(serializeDevice(device));
   });
 
+  router.patch('/devices/:deviceId', async (req, res) => {
+    const device = await findDeviceForRequest(dataSource, req, req.params.deviceId);
+    if (!device) return res.status(404).json({ code: 404, msg: 'device not found' });
+
+    if (typeof req.body.name === 'string' && req.body.name.trim()) {
+      device.name = req.body.name.trim();
+    }
+    if (typeof req.body.type === 'string') {
+      device.type = req.body.type.trim() || undefined;
+    }
+    if (typeof req.body.category === 'string') {
+      const category = req.body.category.trim();
+      if (!isDeviceCategory(category)) {
+        return res.status(400).json({ code: 400, msg: 'invalid device category' });
+      }
+      device.category = category;
+    }
+    if (typeof req.body.roomId === 'string' && req.body.roomId.trim()) {
+      const targetHomeId =
+        typeof req.body.homeId === 'string' && req.body.homeId.trim()
+          ? req.body.homeId.trim()
+          : device.room?.home?.id;
+      if (!targetHomeId) return res.status(400).json({ code: 400, msg: 'homeId required' });
+
+      const room = await findRoomForRequest(dataSource, req, req.body.roomId.trim(), targetHomeId);
+      if (!room) return res.status(404).json({ code: 404, msg: 'target room not found' });
+      device.room = room;
+    }
+
+    await dataSource.getRepository(Device).save(device);
+    const refreshed = await findDeviceForRequest(dataSource, req, device.deviceId);
+    res.json(serializeDevice(refreshed ?? device));
+  });
+
   router.post('/devices/:deviceId/command', async (req, res) => {
     const { deviceId } = req.params;
     const { homeId, roomId, method, params } = req.body;
@@ -157,6 +195,15 @@ export function createDeviceRoutes(dataSource: DataSource, mqttClient: import('m
     });
     if (!snap) return res.status(404).json({ error: 'no snapshot' });
     res.json(snap);
+  });
+
+  router.delete('/devices/:deviceId', async (req, res) => {
+    const device = await findDeviceForRequest(dataSource, req, req.params.deviceId);
+    if (!device) return res.status(404).json({ code: 404, msg: 'device not found' });
+
+    await dataSource.getRepository(Device).remove(device);
+    logger.debug({ deviceId: device.deviceId, roomId: device.room?.id }, 'device deleted');
+    res.json({ status: 'ok', deviceId: device.deviceId });
   });
 
   return router;

@@ -52,6 +52,140 @@ bun run --cwd test-device init-config
 - `devices[*].events`: 事件计划，支持 `intervalSec + chance`。
 - `devices[*].methods`: 命令行为定义，可设定回执状态并同步修改属性。
 
+## 命令调试规范（method / params / apply）
+
+### 1) MQTT 命令负载标准格式
+
+后端会向 `device/{deviceId}/command` 发布如下结构：
+
+```json
+{
+  "cmdId": "uuid",
+  "method": "set_led",
+  "params": {
+    "on": true
+  },
+  "timeout": 5000
+}
+```
+
+其中 `test-device` 只关注：
+
+- `method`: 匹配 `devices[*].methods[*].name`
+- `params`: 作为方法入参
+
+### 2) `methods[*]` 字段含义
+
+- `name`: 方法名（必填），例如 `set_led`
+- `ackStatus`: 回执状态，`ok` 或 `error`，默认 `ok`
+- `error`: 当 `ackStatus = "error"` 时回执的错误文本
+- `result`: 回执 `result` 内容
+- `apply`: 方法执行后的属性副作用规则（可选）
+
+### 3) `apply` 写法与参数映射
+
+`apply.type = "set-attr"`（默认）：
+
+- 作用：把一个值写到某个属性
+- 必填：`apply.attr`
+- 取值优先级（推荐只依赖前两条）：
+1. `params[apply.fromParam]`（完全匹配）
+2. `params` 中与 `fromParam` 忽略大小写/`_`/`-` 后匹配的字段
+3. `params.value[apply.fromParam]`（兼容前端调试面板）
+4. `params.value` 中与 `fromParam` 忽略大小写/`_`/`-` 后匹配的字段
+5. 若还未命中，会走调试回退规则（见第 4 节）
+
+示例（推荐，接口最清晰）：
+
+```toml
+[[devices.methods]]
+name = "set_led"
+ackStatus = "ok"
+
+[devices.methods.apply]
+type = "set-attr"
+attr = "led"
+fromParam = "on"
+```
+
+对应命令：
+
+```json
+{"method":"set_led","params":{"on":true}}
+```
+
+`apply.type = "set-attr"` 固定值：
+
+```toml
+[devices.methods.apply]
+type = "set-attr"
+attr = "led"
+value = true
+```
+
+`apply.type = "merge-attrs"`：
+
+- 作用：将 `params` 整体合并到当前属性
+
+```toml
+[devices.methods.apply]
+type = "merge-attrs"
+```
+
+对应命令：
+
+```json
+{"method":"set_light","params":{"power":true,"brightness":80}}
+```
+
+### 4) 不写 `apply` 时的调试回退规则
+
+用于快速联调，避免每个方法都手写 `apply`：
+
+1. 从方法名推断属性名：
+- `set_led` -> `led`
+- `set-led` -> `led`
+- `setLed` -> `led`
+2. 取值优先级：
+- `params[推断属性名]`
+- `params` 中“忽略大小写/`_`/`-`”后匹配的字段
+- `params.value` / `params.on` / `params.state` / `params.enabled`
+- 若 `params` 只有一个字段，则取该字段值
+
+建议：正式联调仍优先写 `apply`，这样行为最可控、最易读。
+
+### 5) 前端调试面板输入怎么对应 `params`
+
+当前前端“下发命令”面板会把输入框内容包成 `params.value`，例如：
+
+- 输入 `true` -> `params = { "value": true }`
+- 输入 `{"on": true}` -> `params = { "value": { "on": true } }`
+
+所以对于 `set_led + fromParam = "on"`，你有两种稳定用法：
+
+1. 输入 `{"on": true}`（保持 `fromParam = "on"`）
+2. 改配置为 `fromParam = "value"`，然后输入 `true`
+
+### 6) 推荐模板（可直接复制）
+
+```toml
+[[devices.methods]]
+name = "set_led"
+ackStatus = "ok"
+result = { message = "led updated by simulator" }
+
+[devices.methods.apply]
+type = "set-attr"
+attr = "led"
+fromParam = "on"
+```
+
+配套命令：
+
+```json
+{"method":"set_led","params":{"on":true}}
+```
+
 ## 与后端联调注意
 
 - 当前后端 `register` 要求设备先在数据库预注册，否则会拒绝注册。

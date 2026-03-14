@@ -27,9 +27,9 @@ function LoginPage() {
       }
       setAuth(res.token, res.user);
       navigate({ to: '/' });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || (isRegister ? '注册失败' : '登录失败，请检查账号密码'));
+      setError((err as { message?: string })?.message || (isRegister ? '注册失败' : '登录失败，请检查账号密码'));
     }
   };
 

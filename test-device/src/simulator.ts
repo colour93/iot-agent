@@ -203,6 +203,7 @@ export class DeviceSimulator {
 
   private applyCommandSideEffect(methodConfig: CommandMethod, params: Record<string, unknown>) {
     if (!methodConfig.apply) {
+      this.applyMethodDebugFallback(methodConfig.name, params);
       return;
     }
 
@@ -211,10 +212,10 @@ export class DeviceSimulator {
       if (!attr) {
         return;
       }
-      const value =
-        typeof methodConfig.apply.fromParam === "string"
-          ? params[methodConfig.apply.fromParam]
-          : methodConfig.apply.value;
+      const value = resolveMethodApplyValue(methodConfig.apply, params, attr);
+      if (typeof value === "undefined") {
+        return;
+      }
       this.runtime.attrs[attr] = value;
       return;
     }
@@ -222,6 +223,42 @@ export class DeviceSimulator {
     if (methodConfig.apply.type === "merge-attrs") {
       Object.assign(this.runtime.attrs, params);
     }
+  }
+
+  private applyMethodDebugFallback(methodName: string, params: Record<string, unknown>) {
+    const inferredAttr = inferAttrFromMethodName(methodName);
+    if (!inferredAttr) {
+      return;
+    }
+
+    const attr = this.resolveAttrName(inferredAttr);
+    const value = pickMethodDebugValue(attr, params);
+    if (typeof value === "undefined") {
+      return;
+    }
+
+    this.runtime.attrs[attr] = value;
+    this.logger.debug(`device ${this.device.deviceId} method debug side effect`, {
+      method: methodName,
+      attr,
+      value,
+    });
+  }
+
+  private resolveAttrName(inferredAttr: string): string {
+    const attrs = Object.keys({
+      ...this.device.attrs,
+      ...this.runtime.attrs,
+    });
+
+    const exact = attrs.find((attr) => attr === inferredAttr);
+    if (exact) {
+      return exact;
+    }
+
+    const normalizedTarget = normalizeKey(inferredAttr);
+    const normalized = attrs.find((attr) => normalizeKey(attr) === normalizedTarget);
+    return normalized ?? inferredAttr;
   }
 
   private publishRegister() {
@@ -449,4 +486,98 @@ function tryParseJson(text: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+function inferAttrFromMethodName(methodName: string): string | undefined {
+  const snakeOrKebab = methodName.match(/^set[-_](.+)$/i);
+  if (snakeOrKebab?.[1]) {
+    return snakeOrKebab[1];
+  }
+
+  const camel = methodName.match(/^set([A-Z].+)$/);
+  if (camel?.[1]) {
+    const [first = "", ...rest] = camel[1];
+    return `${first.toLowerCase()}${rest.join("")}`;
+  }
+
+  return undefined;
+}
+
+function pickMethodDebugValue(attrName: string, params: Record<string, unknown>): unknown {
+  if (Object.prototype.hasOwnProperty.call(params, attrName)) {
+    return params[attrName];
+  }
+
+  const normalizedAttr = normalizeKey(attrName);
+  const normalizedMatch = Object.entries(params).find(([key]) => normalizeKey(key) === normalizedAttr);
+  if (normalizedMatch) {
+    return normalizedMatch[1];
+  }
+
+  const candidateKeys = ["value", "on", "state", "enabled"];
+  for (const key of candidateKeys) {
+    if (Object.prototype.hasOwnProperty.call(params, key)) {
+      return params[key];
+    }
+  }
+
+  const entries = Object.entries(params);
+  if (entries.length === 1) {
+    return entries[0]?.[1];
+  }
+
+  return undefined;
+}
+
+function normalizeKey(input: string): string {
+  return input.replaceAll(/[\s_-]/g, "").toLowerCase();
+}
+
+function resolveMethodApplyValue(
+  apply: { fromParam?: string; value?: unknown },
+  params: Record<string, unknown>,
+  attrName: string,
+): unknown {
+  if (typeof apply.fromParam === "string") {
+    const picked = pickParamValue(params, apply.fromParam);
+    if (typeof picked !== "undefined") {
+      return picked;
+    }
+    return pickMethodDebugValue(attrName, params);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(apply, "value")) {
+    return apply.value;
+  }
+
+  return pickMethodDebugValue(attrName, params);
+}
+
+function pickParamValue(params: Record<string, unknown>, key: string): unknown {
+  if (Object.prototype.hasOwnProperty.call(params, key)) {
+    return params[key];
+  }
+
+  const normalizedKey = normalizeKey(key);
+  const normalizedMatch = Object.entries(params).find(([name]) => normalizeKey(name) === normalizedKey);
+  if (normalizedMatch) {
+    return normalizedMatch[1];
+  }
+
+  const envelope = params.value;
+  if (typeof envelope !== "object" || envelope === null || Array.isArray(envelope)) {
+    return undefined;
+  }
+
+  const envelopeObj = envelope as Record<string, unknown>;
+  if (Object.prototype.hasOwnProperty.call(envelopeObj, key)) {
+    return envelopeObj[key];
+  }
+
+  const nestedMatch = Object.entries(envelopeObj).find(([name]) => normalizeKey(name) === normalizedKey);
+  if (nestedMatch) {
+    return nestedMatch[1];
+  }
+
+  return undefined;
 }
